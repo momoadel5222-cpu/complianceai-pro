@@ -4,7 +4,7 @@ from supabase import create_client, Client
 import os
 import logging
 from datetime import datetime
-import openai
+from openai import OpenAI
 from fuzzywuzzy import fuzz
 import numpy as np
 
@@ -19,10 +19,13 @@ SUPABASE_KEY = os.environ.get('SUPABASE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXV
 DEEPSEEK_API_KEY = os.environ.get('DEEPSEEK_API_KEY')
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# Configure DeepSeek
+# Configure DeepSeek client
+deepseek_client = None
 if DEEPSEEK_API_KEY:
-    openai.api_key = DEEPSEEK_API_KEY
-    openai.api_base = "https://api.deepseek.com/v1"  # DeepSeek API endpoint
+    deepseek_client = OpenAI(
+        api_key=DEEPSEEK_API_KEY,
+        base_url="https://api.deepseek.com/v1"
+    )
     logger.info("✅ DeepSeek API key configured")
 else:
     logger.warning("⚠️ DeepSeek API key not found - AI features disabled")
@@ -36,9 +39,9 @@ def calculate_fuzzy_score(str1, str2):
                   fuzz.token_sort_ratio(str1, str2) * 0.3 + fuzz.token_set_ratio(str1, str2) * 0.3) / 100.0, 3)
 
 def get_embedding_deepseek(text):
-    if not DEEPSEEK_API_KEY: return None
+    if not deepseek_client: return None
     try:
-        response = openai.embeddings.create(
+        response = deepseek_client.embeddings.create(
             model="text-embedding",
             input=text
         )
@@ -55,7 +58,7 @@ def cosine_similarity(vec1, vec2):
     return dot / norm if norm != 0 else 0.0
 
 def explain_match_with_deepseek(query_name, matched_entity):
-    if not DEEPSEEK_API_KEY: return "AI explanation unavailable"
+    if not deepseek_client: return "AI explanation unavailable"
     try:
         prompt = f"""Analyze this sanctions match for compliance screening:
 
@@ -71,7 +74,7 @@ Provide a concise 2-3 sentence analysis explaining:
 2. Key compliance risks and confidence level
 3. Recommended next steps for due diligence"""
 
-        response = openai.chat.completions.create(
+        response = deepseek_client.chat.completions.create(
             model="deepseek-chat",
             messages=[
                 {"role": "system", "content": "You are a compliance analyst specializing in sanctions screening and financial crime prevention."},
