@@ -4,6 +4,7 @@ gunicorn==21.2.0
 python-dotenv==1.0.0
 requests==2.31.0
 supabase==2.0.0
-jellyfish==1.0.3
-python-Levenshtein==0.23.0
-pandas==2.1.4
+openai==1.54.3
+fuzzywuzzy==0.18.0
+python-Levenshtein==0.26.0
+numpy==1.26.4

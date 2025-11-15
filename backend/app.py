@@ -1,14 +1,12 @@
-from flask import Flask, jsonify, request, send_file
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 from supabase import create_client, Client
 import os
 import logging
-import jellyfish
-import csv
-import io
 from datetime import datetime
-from typing import List, Dict, Any
-import pandas as pd
+import openai
+from fuzzywuzzy import fuzz
+import numpy as np
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -18,210 +16,167 @@ CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 SUPABASE_URL = os.environ.get('SUPABASE_URL', 'https://qwacsyreyuhhlvzcwhnw.supabase.co')
 SUPABASE_KEY = os.environ.get('SUPABASE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF3YWNzeXJleXVoaGx2emN3aG53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxNDIyNzgsImV4cCI6MjA3ODcxODI3OH0.dv17Wt-3YvG-JoExolq9jXsqVMWEyDHRu074LokO7es')
+OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-def calculate_levenshtein_similarity(str1: str, str2: str) -> float:
-    str1, str2 = str1.lower().strip(), str2.lower().strip()
+if OPENAI_API_KEY:
+    openai.api_key = OPENAI_API_KEY
+    logger.info("✅ OpenAI API key configured")
+else:
+    logger.warning("⚠️ OpenAI API key not found - AI features disabled")
+
+def calculate_fuzzy_score(str1, str2):
     if not str1 or not str2:
         return 0.0
-    distance = jellyfish.levenshtein_distance(str1, str2)
-    max_len = max(len(str1), len(str2))
-    return 1 - (distance / max_len) if max_len > 0 else 0.0
-
-def phonetic_match(str1: str, str2: str) -> float:
     str1, str2 = str1.lower().strip(), str2.lower().strip()
-    if str1 == str2:
-        return 1.0
-    
-    # Jaro-Winkler (best for names with typos)
-    jaro_score = jellyfish.jaro_winkler_similarity(str1, str2)
-    
-    # If Jaro-Winkler is very high, trust it
-    if jaro_score >= 0.95:
-        return jaro_score
-    
-    # Otherwise combine with phonetic algorithms
-    try:
-        soundex_score = 1.0 if jellyfish.soundex(str1) == jellyfish.soundex(str2) else 0.0
-    except:
-        soundex_score = 0.0
-    try:
-        metaphone_score = 1.0 if jellyfish.metaphone(str1) == jellyfish.metaphone(str2) else 0.0
-    except:
-        metaphone_score = 0.0
-    
-    # Weight Jaro-Winkler more heavily
-    return (soundex_score * 0.2) + (metaphone_score * 0.2) + (jaro_score * 0.6)
+    if str1 == str2: return 1.0
+    if str1 in str2 or str2 in str1: return 0.9
+    return round((fuzz.ratio(str1, str2) * 0.2 + fuzz.partial_ratio(str1, str2) * 0.2 + 
+                  fuzz.token_sort_ratio(str1, str2) * 0.3 + fuzz.token_set_ratio(str1, str2) * 0.3) / 100.0, 3)
 
-def calculate_weighted_score(name: str, entity: Dict[str, Any], filters: Dict[str, Any]) -> Dict[str, Any]:
-    entity_name = entity.get('entity_name', '')
-    exact_score = 1.0 if name.lower() == entity_name.lower() else 0.0
-    levenshtein_score = calculate_levenshtein_similarity(name, entity_name)
-    phonetic_score = phonetic_match(name, entity_name)
-    name_score = max(exact_score, levenshtein_score * 0.9, phonetic_score * 0.85)
-    alias_scores = []
-    aliases = entity.get('aliases', []) or []
-    for alias in aliases:
-        if alias:
-            alias_str = str(alias)
-            alias_exact = 1.0 if name.lower() == alias_str.lower() else 0.0
-            alias_lev = calculate_levenshtein_similarity(name, alias_str)
-            alias_phon = phonetic_match(name, alias_str)
-            alias_scores.append(max(alias_exact, alias_lev * 0.9, alias_phon * 0.85))
-    best_alias_score = max(alias_scores) if alias_scores else 0.0
-    best_overall_score = max(name_score, best_alias_score)
-    bonus = 0.0
-    if filters.get('nationality'):
-        entity_nationalities = entity.get('nationalities', []) or []
-        if filters['nationality'].upper() in [n.upper() for n in entity_nationalities]:
-            bonus += 0.05
-    if filters.get('date_of_birth'):
-        entity_dob = entity.get('date_of_birth_text', '')
-        if entity_dob and filters['date_of_birth'] in entity_dob:
-            bonus += 0.05
-    source_weights = {'UN': 1.0, 'OFAC': 1.0, 'EU': 0.95, 'UK': 0.95, 'MLCU': 0.9}
-    source_weight = source_weights.get(entity.get('list_source', 'OTHER'), 0.85)
-    final_score = min(1.0, (best_overall_score * source_weight) + bonus)
-    return {'name_score': name_score, 'phonetic_score': phonetic_score, 'levenshtein_score': levenshtein_score, 'best_alias_score': best_alias_score, 'best_score': final_score, 'alias_scores': alias_scores}
+def get_embedding(text):
+    if not OPENAI_API_KEY: return None
+    try:
+        response = openai.embeddings.create(model="text-embedding-3-small", input=text)
+        return response.data[0].embedding
+    except Exception as e:
+        logger.error(f"Embedding error: {e}")
+        return None
 
-def apply_filters(entities: List[Dict], filters: Dict[str, Any]) -> List[Dict]:
-    filtered = []
-    for entity in entities:
-        if filters.get('nationality'):
-            entity_nationalities = entity.get('nationalities', []) or []
-            if not any(filters['nationality'].upper() in n.upper() for n in entity_nationalities):
-                continue
-        if filters.get('date_of_birth'):
-            entity_dob = entity.get('date_of_birth_text', '')
-            if not entity_dob or filters['date_of_birth'] not in entity_dob:
-                continue
-        if filters.get('date_from') or filters.get('date_to'):
-            entity_date = entity.get('date_listed')
-            if entity_date:
-                try:
-                    entity_dt = datetime.strptime(entity_date, '%Y-%m-%d')
-                    if filters.get('date_from'):
-                        from_dt = datetime.strptime(filters['date_from'], '%Y-%m-%d')
-                        if entity_dt < from_dt:
-                            continue
-                    if filters.get('date_to'):
-                        to_dt = datetime.strptime(filters['date_to'], '%Y-%m-%d')
-                        if entity_dt > to_dt:
-                            continue
-                except:
-                    pass
-        if filters.get('program'):
-            if filters['program'].lower() not in entity.get('program', '').lower():
-                continue
-        filtered.append(entity)
-    return filtered
+def cosine_similarity(vec1, vec2):
+    if vec1 is None or vec2 is None: return 0.0
+    vec1, vec2 = np.array(vec1), np.array(vec2)
+    dot = np.dot(vec1, vec2)
+    norm = np.linalg.norm(vec1) * np.linalg.norm(vec2)
+    return dot / norm if norm != 0 else 0.0
+
+def explain_match_with_ai(query_name, matched_entity):
+    if not OPENAI_API_KEY: return "AI explanation unavailable"
+    try:
+        prompt = f"""Analyze this sanctions match:
+Query: {query_name}
+Entity: {matched_entity.get('entity_name')}
+Aliases: {', '.join(matched_entity.get('aliases', [])[:3])}
+Nationality: {', '.join(matched_entity.get('nationalities', []))}
+Program: {matched_entity.get('program', 'N/A')}
+Source: {matched_entity.get('list_source', 'N/A')}
+Provide 2-3 sentences explaining: why matched, key risks, confidence level."""
+        response = openai.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "system", "content": "You are a compliance expert."}, {"role": "user", "content": prompt}],
+            max_tokens=150, temperature=0.3
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        return f"Unable to generate explanation: {str(e)}"
+
+def calculate_risk_score(entity, match_score, semantic_score=None):
+    risk_score = match_score * 40
+    risk_factors = []
+    if semantic_score and semantic_score > 0.7:
+        risk_score += semantic_score * 20
+        risk_factors.append("High semantic similarity")
+    high_risk = ['terrorism', 'proliferation', 'narcotics', 'isis', 'al-qaeda']
+    program = entity.get('program', '').lower()
+    if any(k in program for k in high_risk):
+        risk_score += 20
+        risk_factors.append(f"High-risk program: {entity.get('program')}")
+    elif program:
+        risk_score += 10
+        risk_factors.append(f"Listed program: {entity.get('program')}")
+    if any(s in entity.get('list_source', '').lower() for s in ['ofac', 'un', 'eu', 'uk']):
+        risk_score += 10
+        risk_factors.append(f"Trusted source: {entity.get('list_source')}")
+    date_listed = entity.get('date_listed')
+    if date_listed:
+        try:
+            listed = datetime.fromisoformat(date_listed.replace('Z', '+00:00'))
+            days = (datetime.now(listed.tzinfo) - listed).days
+            if days < 365: risk_score += 10; risk_factors.append("Recently listed")
+            elif days < 1825: risk_score += 5
+        except: pass
+    risk_score = min(100, risk_score)
+    level = "CRITICAL" if risk_score >= 80 else "HIGH" if risk_score >= 60 else "MEDIUM" if risk_score >= 40 else "LOW"
+    return {'score': round(risk_score, 1), 'level': level, 'factors': risk_factors}
 
 @app.route('/api/health', methods=['GET'])
 def health():
-    return jsonify({"status": "ok", "message": "Backend is running"}), 200
+    return jsonify({"status": "ok", "message": "Backend is running", 
+                    "ai_features": "enabled" if OPENAI_API_KEY else "disabled", 
+                    "version": "2.0-AI-Enhanced"}), 200
 
 @app.route('/', methods=['GET'])
 def root():
-    return jsonify({"message": "ComplianceAI Backend API", "status": "running"}), 200
+    return jsonify({"message": "ComplianceAI Backend API", "status": "running", "version": "2.0-AI-Enhanced"}), 200
 
 @app.route('/api/sanctions/screen', methods=['POST', 'OPTIONS'])
 def sanctions_screen():
-    if request.method == 'OPTIONS':
-        return '', 204
+    if request.method == 'OPTIONS': return '', 204
     try:
         data = request.get_json()
         logger.info(f"Request: {data}")
         name = data.get('name', '').strip()
         entity_type = data.get('type', 'individual')
-        filters = {'nationality': data.get('nationality', '').strip(), 'date_of_birth': data.get('date_of_birth', '').strip(), 'date_from': data.get('date_from', '').strip(), 'date_to': data.get('date_to', '').strip(), 'program': data.get('program', '').strip(), 'min_score': float(data.get('min_score', 0.6))}
-        if not name:
-            return jsonify({"success": False, "error": "Name required"}), 400
+        use_ai = data.get('use_ai', True)
+        nationality_filter = data.get('nationality', '').strip()
+        if not name: return jsonify({"success": False, "error": "Name required"}), 400
+        
+        query_embedding = get_embedding(name) if use_ai and OPENAI_API_KEY else None
+        if query_embedding: logger.info("✅ Generated query embedding")
+        
         try:
-            response = supabase.table('sanctions_list').select('*').ilike('entity_name', f'%{name}%').limit(300).execute()
+            query = supabase.table('sanctions_list').select('*')
+            if entity_type != 'all': query = query.eq('entity_type', entity_type)
+            query = query.or_(f'entity_name.ilike.%{name}%,aliases.cs.{{"{name}"}}')
+            response = query.limit(300).execute()
             all_matches = response.data if response.data else []
-            logger.info(f"Found {len(all_matches)} initial matches")
+            logger.info(f"Found {len(all_matches)} database matches")
         except Exception as e:
             logger.error(f"DB error: {str(e)}")
             return jsonify({"success": False, "error": str(e)}), 500
-        type_filtered = [e for e in all_matches if e.get('entity_type') == entity_type]
-        filtered_entities = apply_filters(type_filtered, filters)
+        
         matches = []
-        for entity in filtered_entities:
-            scores = calculate_weighted_score(name, entity, filters)
-            if scores['best_score'] >= filters['min_score']:
-                matches.append({**entity, **scores})
-        matches.sort(key=lambda x: x.get('best_score', 0), reverse=True)
+        for entity in all_matches:
+            if nationality_filter:
+                nats = entity.get('nationalities', []) or []
+                if not any(nationality_filter.lower() in n.lower() for n in nats): continue
+            
+            entity_name = entity.get('entity_name', '')
+            name_score = calculate_fuzzy_score(name, entity_name)
+            alias_scores = [calculate_fuzzy_score(name, str(a)) for a in (entity.get('aliases', []) or []) if a]
+            best_fuzzy = max([name_score] + alias_scores) if alias_scores else name_score
+            
+            semantic_score = None
+            if query_embedding and use_ai:
+                entity_text = f"{entity_name} {' '.join((entity.get('aliases', []) or [])[:3])}"
+                entity_emb = get_embedding(entity_text)
+                if entity_emb: semantic_score = cosine_similarity(query_embedding, entity_emb)
+            
+            combined = (best_fuzzy * 0.6 + semantic_score * 0.4) if semantic_score else best_fuzzy
+            if combined > 0.5:
+                risk = calculate_risk_score(entity, combined, semantic_score)
+                matches.append({**entity, 'match_score': round(name_score, 3), 'best_fuzzy_score': round(best_fuzzy, 3),
+                               'semantic_score': round(semantic_score, 3) if semantic_score else None,
+                               'combined_score': round(combined, 3), 'risk_assessment': risk, 'ai_explanation': None})
+        
+        matches.sort(key=lambda x: x.get('combined_score', 0), reverse=True)
+        if use_ai and OPENAI_API_KEY and matches:
+            for i, m in enumerate(matches[:3]):
+                logger.info(f"Generating AI explanation for match {i+1}")
+                m['ai_explanation'] = explain_match_with_ai(name, m)
         matches = matches[:20]
+        
         status = 'no_match'
         if matches:
-            if matches[0]['best_score'] >= 0.9:
-                status = 'match'
-            elif matches[0]['best_score'] >= 0.75:
-                status = 'potential_match'
-            else:
-                status = 'low_confidence_match'
+            top = matches[0]['combined_score']
+            status = 'match' if top > 0.85 else 'potential_match' if top > 0.65 else 'low_confidence_match'
+        
         logger.info(f"Returning {len(matches)} matches, status: {status}")
-        return jsonify({"success": True, "data": {"screening_id": f"SCR-{datetime.now().strftime('%Y%m%d%H%M%S')}-{hash(name) % 10000:04d}", "status": status, "matches": matches, "filters_applied": filters, "search_metadata": {"total_scanned": len(all_matches), "after_filters": len(filtered_entities), "returned": len(matches)}}}), 200
+        return jsonify({"success": True, "data": {"screening_id": f"screen-{hash(name)}-{int(datetime.now().timestamp())}",
+                       "status": status, "matches": matches, "query": {"name": name, "type": entity_type, 
+                       "ai_enabled": use_ai and OPENAI_API_KEY is not None}, "timestamp": datetime.now().isoformat()}}), 200
     except Exception as e:
         logger.error(f"Error: {str(e)}", exc_info=True)
-        return jsonify({"success": False, "error": str(e)}), 500
-
-@app.route('/api/sanctions/bulk-screen', methods=['POST', 'OPTIONS'])
-def bulk_screen():
-    if request.method == 'OPTIONS':
-        return '', 204
-    try:
-        if 'file' not in request.files:
-            return jsonify({"success": False, "error": "No file provided"}), 400
-        file = request.files['file']
-        if not file.filename.endswith('.csv'):
-            return jsonify({"success": False, "error": "Only CSV files accepted"}), 400
-        stream = io.StringIO(file.stream.read().decode("UTF8"), newline=None)
-        csv_data = csv.DictReader(stream)
-        results = []
-        for row in csv_data:
-            name = row.get('name', '').strip()
-            entity_type = row.get('type', 'individual').strip().lower()
-            if not name:
-                continue
-            try:
-                response = supabase.table('sanctions_list').select('*').ilike('entity_name', f'%{name}%').eq('entity_type', entity_type).limit(50).execute()
-                entities = response.data if response.data else []
-                matches = []
-                for entity in entities:
-                    scores = calculate_weighted_score(name, entity, {})
-                    if scores['best_score'] >= 0.6:
-                        matches.append({'entity_name': entity.get('entity_name'), 'list_source': entity.get('list_source'), 'score': scores['best_score'], 'program': entity.get('program')})
-                matches.sort(key=lambda x: x['score'], reverse=True)
-                top_match = matches[0] if matches else None
-                status = 'no_match'
-                if top_match:
-                    status = 'match' if top_match['score'] >= 0.85 else 'potential_match'
-                results.append({'name': name, 'type': entity_type, 'status': status, 'match_count': len(matches), 'top_match': top_match})
-            except Exception as e:
-                results.append({'name': name, 'type': entity_type, 'status': 'error', 'error': str(e)})
-        return jsonify({"success": True, "data": {"total_screened": len(results), "results": results}}), 200
-    except Exception as e:
-        logger.error(f"Bulk screen error: {str(e)}", exc_info=True)
-        return jsonify({"success": False, "error": str(e)}), 500
-
-@app.route('/api/stats', methods=['GET'])
-def get_stats():
-    try:
-        total = supabase.table('sanctions_list').select('*', count='exact').execute()
-        sources = supabase.table('sanctions_list').select('list_source').execute()
-        source_counts = {}
-        for item in sources.data:
-            source = item.get('list_source', 'Unknown')
-            source_counts[source] = source_counts.get(source, 0) + 1
-        types = supabase.table('sanctions_list').select('entity_type').execute()
-        type_counts = {}
-        for item in types.data:
-            etype = item.get('entity_type', 'Unknown')
-            type_counts[etype] = type_counts.get(etype, 0) + 1
-        return jsonify({"success": True, "data": {"total_records": total.count, "by_source": source_counts, "by_type": type_counts}}), 200
-    except Exception as e:
-        logger.error(f"Stats error: {str(e)}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 if __name__ == "__main__":
