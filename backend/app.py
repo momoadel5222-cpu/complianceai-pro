@@ -32,6 +32,15 @@ def phonetic_match(str1: str, str2: str) -> float:
     str1, str2 = str1.lower().strip(), str2.lower().strip()
     if str1 == str2:
         return 1.0
+    
+    # Jaro-Winkler (best for names with typos)
+    jaro_score = jellyfish.jaro_winkler_similarity(str1, str2)
+    
+    # If Jaro-Winkler is very high, trust it
+    if jaro_score >= 0.95:
+        return jaro_score
+    
+    # Otherwise combine with phonetic algorithms
     try:
         soundex_score = 1.0 if jellyfish.soundex(str1) == jellyfish.soundex(str2) else 0.0
     except:
@@ -40,8 +49,9 @@ def phonetic_match(str1: str, str2: str) -> float:
         metaphone_score = 1.0 if jellyfish.metaphone(str1) == jellyfish.metaphone(str2) else 0.0
     except:
         metaphone_score = 0.0
-    jaro_score = jellyfish.jaro_winkler_similarity(str1, str2)
-    return (soundex_score * 0.3) + (metaphone_score * 0.3) + (jaro_score * 0.4)
+    
+    # Weight Jaro-Winkler more heavily
+    return (soundex_score * 0.2) + (metaphone_score * 0.2) + (jaro_score * 0.6)
 
 def calculate_weighted_score(name: str, entity: Dict[str, Any], filters: Dict[str, Any]) -> Dict[str, Any]:
     entity_name = entity.get('entity_name', '')
