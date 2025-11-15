@@ -28,3 +28,9 @@ Thumbs.db
 node_modules/
 .next/
 out/
+
+# Environment files
+.env
+.env.local
+frontend/.env
+frontend/.env.local

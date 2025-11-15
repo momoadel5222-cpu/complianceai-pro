@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Search, AlertTriangle, CheckCircle, XCircle, FileText, Calendar, Globe, Hash, User, Building2, TrendingUp, Clock, Download, Shield, Shield } from 'lucide-react';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://complianceai-backend-pst6.onrender.com/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://complianceai-backend-7n50.onrender.com/api';
 
 function App() {
   const [searchTerm, setSearchTerm] = useState('');

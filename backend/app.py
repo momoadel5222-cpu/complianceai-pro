@@ -3,26 +3,25 @@ from flask_cors import CORS
 import os
 import logging
 
-# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# CORS configuration
+# CORS configuration with Vercel frontend
 CORS(app, resources={
     r"/api/*": {
         "origins": [
             "https://complianceai-pro.vercel.app",
             "http://localhost:3000",
-            "http://localhost:5173"
+            "http://localhost:5173",
+            "http://localhost:5174"
         ],
-        "methods": ["GET", "POST", "OPTIONS"],
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"]
     }
 })
 
-# Health check endpoint
 @app.route('/api/health', methods=['GET'])
 def health():
     logger.info("Health check endpoint called")
@@ -32,7 +31,6 @@ def health():
         "port": os.environ.get('PORT', 'unknown')
     }), 200
 
-# Root endpoint
 @app.route('/', methods=['GET'])
 def root():
     return jsonify({
@@ -44,14 +42,12 @@ def root():
         }
     }), 200
 
-# Screening endpoint
 @app.route('/api/screen', methods=['POST'])
 def screen():
     try:
         data = request.get_json()
         logger.info(f"Screening request received: {data}")
         
-        # Your screening logic here
         result = {
             "status": "success",
             "message": "Screening completed",
@@ -67,7 +63,6 @@ def screen():
             "message": str(e)
         }), 500
 
-# Error handlers
 @app.errorhandler(404)
 def not_found(e):
     return jsonify({"error": "Not found"}), 404
