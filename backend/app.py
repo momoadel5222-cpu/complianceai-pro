@@ -8,19 +8,18 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# CORS configuration with Vercel frontend
-CORS(app, resources={
-    r"/api/*": {
-        "origins": [
-            "https://complianceai-pro.vercel.app",
-            "http://localhost:3000",
-            "http://localhost:5173",
-            "http://localhost:5174"
-        ],
-        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization"]
-    }
-})
+# CORS configuration - allow all /api routes
+CORS(app, 
+     resources={
+         r"/api/*": {
+             "origins": "*",  # Allow all origins temporarily for testing
+             "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+             "allow_headers": ["Content-Type", "Authorization"],
+             "expose_headers": ["Content-Type"],
+             "supports_credentials": False
+         }
+     }
+)
 
 @app.route('/api/health', methods=['GET'])
 def health():
@@ -38,12 +37,16 @@ def root():
         "status": "running",
         "endpoints": {
             "health": "/api/health",
-            "screen": "/api/screen"
+            "screen": "/api/screen",
+            "sanctions_screen": "/api/sanctions/screen"
         }
     }), 200
 
-@app.route('/api/screen', methods=['POST'])
+@app.route('/api/screen', methods=['POST', 'OPTIONS'])
 def screen():
+    if request.method == 'OPTIONS':
+        return '', 204
+    
     try:
         data = request.get_json()
         logger.info(f"Screening request received: {data}")
@@ -58,6 +61,31 @@ def screen():
     
     except Exception as e:
         logger.error(f"Error in screening: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+
+@app.route('/api/sanctions/screen', methods=['POST', 'OPTIONS'])
+def sanctions_screen():
+    if request.method == 'OPTIONS':
+        return '', 204
+    
+    try:
+        data = request.get_json()
+        logger.info(f"Sanctions screening request received: {data}")
+        
+        result = {
+            "status": "success",
+            "message": "Sanctions screening completed",
+            "data": data,
+            "matches": []  # Add your sanctions matching logic here
+        }
+        
+        return jsonify(result), 200
+    
+    except Exception as e:
+        logger.error(f"Error in sanctions screening: {str(e)}")
         return jsonify({
             "status": "error",
             "message": str(e)
