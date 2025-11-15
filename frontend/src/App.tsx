@@ -1,5 +1,4 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { useAuth } from './AuthContext';
 import Login from './Login';
 import Register from './Register';
 import ProtectedRoute from './ProtectedRoute';
@@ -7,7 +6,6 @@ import ScreeningPage from './ScreeningPage';
 import { LogOut } from 'lucide-react';
 
 function Dashboard() {
-  const { user, signOut } = useAuth();
 
   return (
     <div className="min-h-screen bg-gray-50">
