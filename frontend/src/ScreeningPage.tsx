@@ -34,7 +34,7 @@ interface SearchHistory {
 }
 
 export default function ScreeningPage() {
-  const { user } = useAuth();
+  // const { user } = useAuth();
   const [entityName, setEntityName] = useState('');
   const [entityType, setEntityType] = useState<'individual' | 'entity'>('individual');
   const [loading, setLoading] = useState(false);
