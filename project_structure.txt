@@ -1,0 +1,70 @@
+.
+├── README.md
+├── backend
+│   ├── 0.7,
+│   ├── backend@1.0.0
+│   ├── generate-index.js
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── src
+│   │   ├── db.ts
+│   │   ├── index.ts
+│   │   ├── routes
+│   │   ├── supabase.ts
+│   │   └── utils
+│   ├── str2.length
+│   ├── test-fixed.ts
+│   ├── test-supabase.ts
+│   ├── tsconfig.json
+│   ├── tsx
+│   └── verify-db.ts
+├── data
+│   ├── add.csv
+│   ├── alt.csv
+│   ├── ofac_unified.csv
+│   ├── sample_sanctions.csv
+│   └── sdn.csv
+├── docs
+│   └── DATA_IMPORT_GUIDE.md
+├── frontend
+│   ├── README.md
+│   ├── eslint.config.js
+│   ├── index.html
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── postcss.config.js
+│   ├── public
+│   │   └── vite.svg
+│   ├── src
+│   │   ├── App.css
+│   │   ├── App.tsx
+│   │   ├── App.tsx.backup
+│   │   ├── App.tsx.tmp
+│   │   ├── assets
+│   │   ├── components
+│   │   ├── index.css
+│   │   ├── lib
+│   │   └── main.tsx
+│   ├── tailwind.config.js
+│   ├── tsconfig.app.json
+│   ├── tsconfig.json
+│   ├── tsconfig.node.json
+│   └── vite.config.ts
+├── package-lock.json
+├── package.json
+├── project_structure.txt
+├── scripts
+│   ├── data-import
+│   │   ├── enhanced_ofac_parser.js
+│   │   ├── import_ofac_real.js
+│   │   ├── package-lock.json
+│   │   ├── package.json
+│   │   ├── sanctions-importer.js
+│   │   └── update-all-lists.sh
+│   ├── import_ofac_real.js
+│   ├── import_sanctions.py
+│   └── parse_ofac.py
+└── src
+    └── routes
+
+17 directories, 51 files
