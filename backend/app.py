@@ -83,25 +83,43 @@ def sanctions_screen():
                 "error": "Name is required"
             }), 400
         
-        # Query Supabase
-        query = supabase.table('sanctions_list').select('*').eq('entity_type', entity_type)
-        
-        # Search by name
-        name_parts = name.split()
-        if len(name_parts) > 1:
-            first_name = name_parts[0]
-            last_name = name_parts[-1]
-            response = query.or_(f"entity_name.ilike.%{name}%,first_name.ilike.%{first_name}%,last_name.ilike.%{last_name}%").limit(100).execute()
-        else:
-            response = query.ilike('entity_name', f'%{name}%').limit(100).execute()
-        
-        potential_matches = response.data if response.data else []
+        # Query Supabase - simpler approach
+        try:
+            response = supabase.table('sanctions_list')\
+                .select('*')\
+                .eq('entity_type', entity_type)\
+                .ilike('entity_name', f'%{name}%')\
+                .limit(100)\
+                .execute()
+            
+            potential_matches = response.data if response.data else []
+            
+        except Exception as db_error:
+            logger.error(f"Database query error: {str(db_error)}")
+            # Fallback: try without entity_type filter
+            try:
+                response = supabase.table('sanctions_list')\
+                    .select('*')\
+                    .ilike('entity_name', f'%{name}%')\
+                    .limit(100)\
+                    .execute()
+                potential_matches = response.data if response.data else []
+            except Exception as fallback_error:
+                logger.error(f"Fallback query also failed: {str(fallback_error)}")
+                return jsonify({
+                    "success": False,
+                    "error": f"Database error: {str(fallback_error)}"
+                }), 500
         
         logger.info(f"Found {len(potential_matches)} potential matches")
         
         # Calculate similarity scores
         matches = []
         for entity in potential_matches:
+            # Filter by entity_type manually if query didn't work
+            if entity.get('entity_type') != entity_type:
+                continue
+                
             entity_name = entity.get('entity_name', '')
             
             # Calculate name similarity
@@ -114,7 +132,7 @@ def sanctions_screen():
                 for alias in aliases:
                     alias_scores.append(calculate_similarity(name, alias))
             
-            best_score = max([name_score] + alias_scores)
+            best_score = max([name_score] + alias_scores) if alias_scores else name_score
             
             if best_score > 0.6:  # 60% threshold
                 matches.append({
@@ -147,7 +165,7 @@ def sanctions_screen():
         return jsonify(result), 200
     
     except Exception as e:
-        logger.error(f"Error in sanctions screening: {str(e)}")
+        logger.error(f"Error in sanctions screening: {str(e)}", exc_info=True)
         return jsonify({
             "success": False,
             "error": str(e)
