@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Search, CheckCircle, Globe, Calendar, User, Building2, Hash } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { Search, CheckCircle, Globe, Calendar, User, Building2, Hash, Filter, Upload, Download, X } from 'lucide-react';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://complianceai-backend-7n50.onrender.com/api';
 
@@ -10,6 +10,22 @@ function ScreeningPage() {
   const [results, setResults] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [searchHistory, setSearchHistory] = useState<any[]>([]);
+  
+  // Advanced filters
+  const [showFilters, setShowFilters] = useState(false);
+  const [nationality, setNationality] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [program, setProgram] = useState('');
+  const [minScore, setMinScore] = useState(0.6);
+  
+  // Bulk screening
+  const [showBulk, setShowBulk] = useState(false);
+  const [bulkFile, setBulkFile] = useState<File | null>(null);
+  const [bulkResults, setBulkResults] = useState<any>(null);
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSearch = async () => {
     if (!searchTerm.trim()) return;
@@ -18,13 +34,24 @@ function ScreeningPage() {
     setResults(null);
 
     try {
-      console.log('🔍 Searching:', searchTerm, 'Type:', entityType);
-      console.log('🌐 API URL:', `${API_BASE_URL}/sanctions/screen`);
+      const payload: any = { 
+        name: searchTerm, 
+        type: entityType,
+        min_score: minScore
+      };
+      
+      if (nationality) payload.nationality = nationality;
+      if (dateOfBirth) payload.date_of_birth = dateOfBirth;
+      if (dateFrom) payload.date_from = dateFrom;
+      if (dateTo) payload.date_to = dateTo;
+      if (program) payload.program = program;
+
+      console.log('🔍 Searching with filters:', payload);
       
       const response = await fetch(`${API_BASE_URL}/sanctions/screen`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: searchTerm, type: entityType }),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
@@ -32,7 +59,7 @@ function ScreeningPage() {
       }
 
       const data = await response.json();
-      console.log('✅ Response data:', data);
+      console.log('✅ Response:', data);
 
       if (data.success) {
         setResults(data.data);
@@ -55,25 +82,210 @@ function ScreeningPage() {
     }
   };
 
+  const handleBulkUpload = async () => {
+    if (!bulkFile) return;
+    
+    setBulkLoading(true);
+    setError(null);
+    
+    try {
+      const formData = new FormData();
+      formData.append('file', bulkFile);
+      
+      const response = await fetch(`${API_BASE_URL}/sanctions/bulk-screen`, {
+        method: 'POST',
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setBulkResults(data.data);
+      } else {
+        setError(data.error || 'Bulk screening failed');
+      }
+    } catch (err: any) {
+      setError(`Bulk screening error: ${err.message}`);
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
+  const downloadTemplate = () => {
+    const csv = 'name,type\nJohn Doe,individual\nAcme Corp,entity';
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'bulk_screening_template.csv';
+    a.click();
+  };
+
+  const clearFilters = () => {
+    setNationality('');
+    setDateOfBirth('');
+    setDateFrom('');
+    setDateTo('');
+    setProgram('');
+    setMinScore(0.6);
+  };
+
   const formatScore = (score: number) => (score * 100).toFixed(1) + '%';
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'match': return 'bg-red-50 border-red-200 text-red-800';
       case 'potential_match': return 'bg-yellow-50 border-yellow-200 text-yellow-800';
+      case 'low_confidence_match': return 'bg-orange-50 border-orange-200 text-orange-800';
       default: return 'bg-green-50 border-green-200 text-green-800';
     }
   };
 
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Search Section */}
       <div className="bg-white rounded-2xl shadow-lg p-8 border border-gray-100 mb-8">
-        <div className="flex items-center space-x-3 mb-6">
-          <div className="bg-blue-100 p-2 rounded-lg">
-            <Search className="w-6 h-6 text-blue-600" />
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center space-x-3">
+            <div className="bg-blue-100 p-2 rounded-lg">
+              <Search className="w-6 h-6 text-blue-600" />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900">Screen Entity</h2>
           </div>
-          <h2 className="text-2xl font-bold text-gray-900">Screen Entity</h2>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={`px-4 py-2 rounded-lg flex items-center gap-2 ${showFilters ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'}`}
+            >
+              <Filter className="w-4 h-4" />
+              Filters
+            </button>
+            <button
+              onClick={() => setShowBulk(!showBulk)}
+              className={`px-4 py-2 rounded-lg flex items-center gap-2 ${showBulk ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-700'}`}
+            >
+              <Upload className="w-4 h-4" />
+              Bulk Screen
+            </button>
+          </div>
         </div>
+        
+        {/* Advanced Filters */}
+        {showFilters && (
+          <div className="mb-6 p-4 bg-blue-50 rounded-xl border border-blue-200">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-semibold text-blue-900">Advanced Filters</h3>
+              <button onClick={clearFilters} className="text-sm text-blue-600 hover:text-blue-800">
+                Clear All
+              </button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nationality</label>
+                <input
+                  type="text"
+                  value={nationality}
+                  onChange={(e) => setNationality(e.target.value)}
+                  placeholder="e.g., USA, UK"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Date of Birth</label>
+                <input
+                  type="text"
+                  value={dateOfBirth}
+                  onChange={(e) => setDateOfBirth(e.target.value)}
+                  placeholder="YYYY-MM-DD"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Program</label>
+                <input
+                  type="text"
+                  value={program}
+                  onChange={(e) => setProgram(e.target.value)}
+                  placeholder="e.g., SDGT, IRAN"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Listed From</label>
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Listed To</label>
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Min Score: {(minScore * 100).toFixed(0)}%</label>
+                <input
+                  type="range"
+                  min="0.5"
+                  max="1"
+                  step="0.05"
+                  value={minScore}
+                  onChange={(e) => setMinScore(parseFloat(e.target.value))}
+                  className="w-full"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Bulk Upload Section */}
+        {showBulk && (
+          <div className="mb-6 p-4 bg-purple-50 rounded-xl border border-purple-200">
+            <h3 className="font-semibold text-purple-900 mb-4">Bulk Screening</h3>
+            <div className="flex gap-4 items-center">
+              <button
+                onClick={downloadTemplate}
+                className="px-4 py-2 bg-white border border-purple-300 rounded-lg flex items-center gap-2 hover:bg-purple-50"
+              >
+                <Download className="w-4 h-4" />
+                Download Template
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv"
+                onChange={(e) => setBulkFile(e.target.files?.[0] || null)}
+                className="hidden"
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="px-4 py-2 bg-white border border-purple-300 rounded-lg flex items-center gap-2 hover:bg-purple-50"
+              >
+                <Upload className="w-4 h-4" />
+                {bulkFile ? bulkFile.name : 'Choose CSV File'}
+              </button>
+              {bulkFile && (
+                <button
+                  onClick={handleBulkUpload}
+                  disabled={bulkLoading}
+                  className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+                >
+                  {bulkLoading ? 'Processing...' : 'Screen All'}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
         
         <div className="space-y-6">
           <div>
@@ -130,6 +342,44 @@ function ScreeningPage() {
         </div>
       </div>
 
+      {/* Bulk Results */}
+      {bulkResults && (
+        <div className="bg-white rounded-2xl shadow-lg p-6 mb-8">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-xl font-bold">Bulk Screening Results</h3>
+            <button onClick={() => setBulkResults(null)} className="text-gray-500 hover:text-gray-700">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <p className="text-sm text-gray-600 mb-4">Screened {bulkResults.total_screened} entities</p>
+          <div className="space-y-2 max-h-96 overflow-y-auto">
+            {bulkResults.results.map((item: any, idx: number) => (
+              <div key={idx} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                <div>
+                  <span className="font-medium">{item.name}</span>
+                  <span className="text-xs text-gray-500 ml-2">({item.type})</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  {item.top_match && (
+                    <span className="text-xs text-gray-600">
+                      {item.top_match.entity_name} ({formatScore(item.top_match.score)})
+                    </span>
+                  )}
+                  <span className={`text-xs font-semibold px-3 py-1 rounded ${
+                    item.status === 'match' ? 'bg-red-100 text-red-700' :
+                    item.status === 'potential_match' ? 'bg-yellow-100 text-yellow-700' :
+                    item.status === 'error' ? 'bg-gray-100 text-gray-700' :
+                    'bg-green-100 text-green-700'
+                  }`}>
+                    {item.status.replace('_', ' ')}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {error && (
         <div className="mb-8 bg-red-50 border-l-4 border-red-500 rounded-xl p-6">
           <h3 className="font-bold text-red-800 mb-2">Error</h3>
@@ -147,6 +397,11 @@ function ScreeningPage() {
               <p className="text-sm mt-1 opacity-75">
                 {results.matches?.length || 0} match(es) found
               </p>
+              {results.search_metadata && (
+                <p className="text-xs mt-1 opacity-60">
+                  Scanned: {results.search_metadata.total_scanned} | Filtered: {results.search_metadata.after_filters}
+                </p>
+              )}
             </div>
             <div className="text-right">
               <div className="text-sm opacity-75">Screening ID</div>
@@ -185,6 +440,11 @@ function ScreeningPage() {
                     {formatScore(match.best_score)}
                   </div>
                   <p className="text-xs text-gray-600">Confidence</p>
+                  <div className="mt-2 text-xs text-gray-500 space-y-1">
+                    <div>Name: {formatScore(match.name_score)}</div>
+                    <div>Phonetic: {formatScore(match.phonetic_score)}</div>
+                    <div>Levenshtein: {formatScore(match.levenshtein_score)}</div>
+                  </div>
                 </div>
               </div>
 
