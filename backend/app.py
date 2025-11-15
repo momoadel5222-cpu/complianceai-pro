@@ -4,7 +4,7 @@ from supabase import create_client, Client
 import os
 import logging
 from datetime import datetime
-import google.generativeai as genai
+import openai
 from fuzzywuzzy import fuzz
 import numpy as np
 
@@ -16,14 +16,16 @@ CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 SUPABASE_URL = os.environ.get('SUPABASE_URL', 'https://qwacsyreyuhhlvzcwhnw.supabase.co')
 SUPABASE_KEY = os.environ.get('SUPABASE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF3YWNzeXJleXVoaGx2emN3aG53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxNDIyNzgsImV4cCI6MjA3ODcxODI3OH0.dv17Wt-3YvG-JoExolq9jXsqVMWEyDHRu074LokO7es')
-GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
+DEEPSEEK_API_KEY = os.environ.get('DEEPSEEK_API_KEY')
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-    logger.info("✅ Gemini API key configured")
+# Configure DeepSeek
+if DEEPSEEK_API_KEY:
+    openai.api_key = DEEPSEEK_API_KEY
+    openai.api_base = "https://api.deepseek.com/v1"  # DeepSeek API endpoint
+    logger.info("✅ DeepSeek API key configured")
 else:
-    logger.warning("⚠️ Gemini API key not found - AI features disabled")
+    logger.warning("⚠️ DeepSeek API key not found - AI features disabled")
 
 def calculate_fuzzy_score(str1, str2):
     if not str1 or not str2: return 0.0
@@ -33,17 +35,16 @@ def calculate_fuzzy_score(str1, str2):
     return round((fuzz.ratio(str1, str2) * 0.2 + fuzz.partial_ratio(str1, str2) * 0.2 + 
                   fuzz.token_sort_ratio(str1, str2) * 0.3 + fuzz.token_set_ratio(str1, str2) * 0.3) / 100.0, 3)
 
-def get_embedding_gemini(text):
-    if not GEMINI_API_KEY: return None
+def get_embedding_deepseek(text):
+    if not DEEPSEEK_API_KEY: return None
     try:
-        result = genai.embed_content(
-            model="models/text-embedding-004",
-            content=text,
-            task_type="retrieval_document"
+        response = openai.embeddings.create(
+            model="text-embedding",
+            input=text
         )
-        return result['embedding']
+        return response.data[0].embedding
     except Exception as e:
-        logger.error(f"Gemini embedding error: {e}")
+        logger.error(f"DeepSeek embedding error: {e}")
         return None
 
 def cosine_similarity(vec1, vec2):
@@ -53,30 +54,35 @@ def cosine_similarity(vec1, vec2):
     norm = np.linalg.norm(vec1) * np.linalg.norm(vec2)
     return dot / norm if norm != 0 else 0.0
 
-def explain_match_with_gemini(query_name, matched_entity):
-    if not GEMINI_API_KEY: return "AI explanation unavailable"
+def explain_match_with_deepseek(query_name, matched_entity):
+    if not DEEPSEEK_API_KEY: return "AI explanation unavailable"
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        prompt = f"""Analyze this sanctions match:
-Query: {query_name}
-Entity: {matched_entity.get('entity_name')}
-Aliases: {', '.join(matched_entity.get('aliases', [])[:3])}
-Nationality: {', '.join(matched_entity.get('nationalities', []))}
-Program: {matched_entity.get('program', 'N/A')}
-Source: {matched_entity.get('list_source', 'N/A')}
+        prompt = f"""Analyze this sanctions match for compliance screening:
 
-Provide 2-3 sentences explaining: why this matched, key compliance risks, and confidence level."""
-        
-        response = model.generate_content(
-            prompt,
-            generation_config=genai.types.GenerationConfig(
-                temperature=0.3,
-                max_output_tokens=150
-            )
+QUERY: {query_name}
+MATCHED ENTITY: {matched_entity.get('entity_name')}
+ALIASES: {', '.join(matched_entity.get('aliases', [])[:3])}
+NATIONALITIES: {', '.join(matched_entity.get('nationalities', []))}
+SANCTIONS PROGRAM: {matched_entity.get('program', 'N/A')}
+SOURCE LIST: {matched_entity.get('list_source', 'N/A')}
+
+Provide a concise 2-3 sentence analysis explaining:
+1. Why this match occurred (name similarity, aliases, etc.)
+2. Key compliance risks and confidence level
+3. Recommended next steps for due diligence"""
+
+        response = openai.chat.completions.create(
+            model="deepseek-chat",
+            messages=[
+                {"role": "system", "content": "You are a compliance analyst specializing in sanctions screening and financial crime prevention."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=200,
+            temperature=0.3
         )
-        return response.text.strip()
+        return response.choices[0].message.content.strip()
     except Exception as e:
-        logger.error(f"Gemini explanation error: {e}")
+        logger.error(f"DeepSeek explanation error: {e}")
         return f"Unable to generate explanation: {str(e)}"
 
 def calculate_risk_score(entity, match_score, semantic_score=None):
@@ -103,7 +109,6 @@ def calculate_risk_score(entity, match_score, semantic_score=None):
     date_listed = entity.get('date_listed')
     if date_listed:
         try:
-            from datetime import datetime
             if isinstance(date_listed, str):
                 listed = datetime.fromisoformat(date_listed.replace('Z', '+00:00'))
                 days = (datetime.now(listed.tzinfo or None) - listed).days
@@ -124,9 +129,9 @@ def health():
     return jsonify({
         "status": "ok",
         "message": "Backend is running",
-        "ai_features": "enabled" if GEMINI_API_KEY else "disabled",
-        "ai_provider": "Gemini",
-        "version": "2.0-Gemini"
+        "ai_features": "enabled" if DEEPSEEK_API_KEY else "disabled",
+        "ai_provider": "DeepSeek",
+        "version": "2.0-DeepSeek"
     }), 200
 
 @app.route('/', methods=['GET'])
@@ -134,8 +139,8 @@ def root():
     return jsonify({
         "message": "ComplianceAI Backend API",
         "status": "running",
-        "version": "2.0-Gemini",
-        "ai_provider": "Google Gemini"
+        "version": "2.0-DeepSeek",
+        "ai_provider": "DeepSeek"
     }), 200
 
 @app.route('/api/sanctions/screen', methods=['POST', 'OPTIONS'])
@@ -155,10 +160,10 @@ def sanctions_screen():
         if not name:
             return jsonify({"success": False, "error": "Name required"}), 400
         
-        # Get query embedding with Gemini
-        query_embedding = get_embedding_gemini(name) if use_ai and GEMINI_API_KEY else None
+        # Get query embedding with DeepSeek
+        query_embedding = get_embedding_deepseek(name) if use_ai and DEEPSEEK_API_KEY else None
         if query_embedding:
-            logger.info("✅ Generated query embedding with Gemini")
+            logger.info("✅ Generated query embedding with DeepSeek")
         
         # Query database
         try:
@@ -187,11 +192,11 @@ def sanctions_screen():
             alias_scores = [calculate_fuzzy_score(name, str(a)) for a in (entity.get('aliases', []) or []) if a]
             best_fuzzy = max([name_score] + alias_scores) if alias_scores else name_score
             
-            # Semantic scoring with Gemini
+            # Semantic scoring with DeepSeek
             semantic_score = None
             if query_embedding and use_ai:
                 entity_text = f"{entity_name} {' '.join((entity.get('aliases', []) or [])[:3])}"
-                entity_emb = get_embedding_gemini(entity_text)
+                entity_emb = get_embedding_deepseek(entity_text)
                 if entity_emb:
                     semantic_score = cosine_similarity(query_embedding, entity_emb)
             
@@ -214,10 +219,10 @@ def sanctions_screen():
         matches.sort(key=lambda x: x.get('combined_score', 0), reverse=True)
         
         # Generate AI explanations for top matches
-        if use_ai and GEMINI_API_KEY and matches:
+        if use_ai and DEEPSEEK_API_KEY and matches:
             for i, m in enumerate(matches[:3]):
-                logger.info(f"Generating Gemini explanation for match {i+1}")
-                m['ai_explanation'] = explain_match_with_gemini(name, m)
+                logger.info(f"Generating DeepSeek explanation for match {i+1}")
+                m['ai_explanation'] = explain_match_with_deepseek(name, m)
         
         matches = matches[:20]
         
@@ -238,8 +243,8 @@ def sanctions_screen():
                 "query": {
                     "name": name,
                     "type": entity_type,
-                    "ai_enabled": use_ai and GEMINI_API_KEY is not None,
-                    "ai_provider": "Gemini" if GEMINI_API_KEY else None
+                    "ai_enabled": use_ai and DEEPSEEK_API_KEY is not None,
+                    "ai_provider": "DeepSeek" if DEEPSEEK_API_KEY else None
                 },
                 "timestamp": datetime.now().isoformat()
             }
