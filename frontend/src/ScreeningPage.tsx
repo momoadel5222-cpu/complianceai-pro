@@ -5,7 +5,7 @@ import { useAuth } from './AuthContext';
 
 const API_BASE_URL = window.location.hostname === 'localhost' 
   ? 'http://localhost:3000/api' 
-  : 'https://shiny-spoon-96qrv99gxxvf74pq-3000.app.github.dev/api';
+  : 'https://complianceai-backend-7n50.onrender.com/api';
 
 interface Match {
   id: string;
