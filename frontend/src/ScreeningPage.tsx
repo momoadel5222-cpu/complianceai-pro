@@ -362,9 +362,9 @@ function ScreeningPage() {
             </div>
 
             {/* Matches */}
-            {results.matches.length > 0 ? (
+            {(results?.matches && results.matches.length > 0) ? (
               <div className="space-y-4">
-                {results.matches.map((match, index) => (
+                {(results?.matches || []).map((match, index) => (
                   <div key={index} className="bg-white rounded-2xl shadow-xl p-6 border-l-4 border-blue-500">
                     <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4 mb-4">
                       <div className="flex-1">
