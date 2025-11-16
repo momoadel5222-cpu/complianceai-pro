@@ -34,3 +34,5 @@ out/
 .env.local
 frontend/.env
 frontend/.env.local
+backend/.env
+frontend/.env
