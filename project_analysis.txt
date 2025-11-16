@@ -1,0 +1,139 @@
+=== PROJECT STRUCTURE ===
+./README.md
+./backend/app.py
+./data/ofac_enhanced.json
+./data/un_enhanced.json
+./data/un_full.json
+./docs/DATA_IMPORT_GUIDE.md
+./frontend/README.md
+./frontend/package-lock.json
+./frontend/package.json
+./frontend/src/App.tsx
+./frontend/src/AuthContext.tsx
+./frontend/src/Login.tsx
+./frontend/src/ProtectedRoute.tsx
+./frontend/src/Register.tsx
+./frontend/src/ScreeningPage.tsx
+./frontend/src/main.tsx
+./frontend/src/supabaseClient.ts
+./frontend/tsconfig.app.json
+./frontend/tsconfig.json
+./frontend/tsconfig.node.json
+./frontend/vite.config.ts
+./package-lock.json
+./package.json
+./scripts/check_un_records.py
+./scripts/data-import/package-lock.json
+./scripts/data-import/package.json
+./scripts/import_enhanced_ofac.py
+./scripts/import_eu_sanctions.py
+./scripts/import_sanctions.py
+./scripts/import_uk_sanctions.py
+./scripts/import_un_fixed.py
+./scripts/import_worldbank.py
+./scripts/parse_ofac.py
+./scripts/parse_ofac_enhanced.py
+./scripts/parse_ofac_fixed.py
+./scripts/parse_un.py
+./scripts/parse_un_full.py
+./tsconfig.json
+./vercel.json
+
+=== FRONTEND FILES ===
+total 136
+drwxrwxrwx+ 3 codespace codespace  4096 Nov 16 00:14 .
+drwxrwxrwx+ 5 codespace codespace  4096 Nov 15 15:42 ..
+-rw-rw-rw-  1 codespace codespace  1024 Nov 15 18:32 .App.tsx.swp
+-rw-r--r--  1 codespace codespace   606 Nov 14 18:09 App.css
+-rw-rw-rw-  1 codespace codespace  1641 Nov 15 20:21 App.tsx
+-rw-r--r--  1 codespace codespace 18250 Nov 14 23:52 App.tsx.backup
+-rw-rw-rw-  1 codespace codespace   350 Nov 14 23:52 App.tsx.tmp
+-rw-rw-rw-  1 codespace codespace  2104 Nov 15 20:18 AuthContext.tsx
+-rw-rw-rw-  1 codespace codespace  3821 Nov 15 20:19 Login.tsx
+-rw-rw-rw-  1 codespace codespace   526 Nov 15 20:20 ProtectedRoute.tsx
+-rw-rw-rw-  1 codespace codespace  5632 Nov 15 20:19 Register.tsx
+-rw-rw-rw-  1 codespace codespace 21321 Nov 16 01:36 ScreeningPage.tsx
+-rw-rw-rw-  1 codespace codespace 22798 Nov 15 22:59 ScreeningPage.tsx.backup
+drwxrwxrwx+ 2 codespace codespace  4096 Nov 14 18:09 assets
+-rw-r--r--  1 codespace codespace    59 Nov 14 22:54 index.css
+-rw-r--r--  1 codespace codespace   408 Nov 15 20:21 main.tsx
+-rw-rw-rw-  1 codespace codespace   129 Nov 16 00:01 requirements.txt
+-rw-rw-rw-  1 codespace codespace    14 Nov 16 00:01 runtime.txt
+-rw-rw-rw-  1 codespace codespace   503 Nov 15 20:18 supabaseClient.ts
+
+=== BACKEND FILES ===
+total 92
+drwxrwxrwx+  4 codespace codespace  4096 Nov 16 00:03 .
+drwxrwxrwx+ 11 codespace root       4096 Nov 16 01:47 ..
+-rw-rw-rw-   1 codespace codespace   182 Nov 15 22:54 .env
+drwxrwxrwx+  2 codespace codespace  4096 Nov 15 22:52 __pycache__
+-rw-rw-rw-   1 codespace codespace  9319 Nov 16 01:11 app.py
+-rw-rw-rw-   1 codespace codespace 11463 Nov 15 22:45 app.py.backup
+-rw-rw-rw-   1 codespace codespace 10267 Nov 15 23:42 app.py.gemini_version
+-rw-rw-rw-   1 codespace codespace  8906 Nov 15 23:02 app.py.old_jellyfish
+-rw-rw-rw-   1 codespace codespace  8906 Nov 15 23:32 app.py.openai_version
+-rw-rw-rw-   1 codespace codespace   142 Nov 16 01:01 requirements.txt
+-rw-rw-rw-   1 codespace codespace   160 Nov 15 22:45 requirements.txt.backup
+-rw-rw-rw-   1 codespace codespace    14 Nov 16 00:41 runtime.txt
+drwxrwxrwx+  5 codespace codespace  4096 Nov 15 17:58 venv
+
+=== PACKAGE.JSON (Frontend) ===
+{
+  "name": "frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint .",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.81.1",
+    "axios": "^1.13.2",
+    "lucide-react": "^0.553.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-router-dom": "^7.9.6"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "@vitejs/plugin-react": "^5.1.0",
+    "autoprefixer": "^10.4.22",
+    "eslint": "^9.39.1",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.4.24",
+    "globals": "^16.5.0",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.1",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.46.3",
+    "vite": "^7.2.2"
+  }
+}
+
+=== REQUIREMENTS.TXT (Backend) ===
+Flask==2.3.3
+flask-cors==4.0.0
+gunicorn==21.2.0
+supabase==2.24.0
+fuzzywuzzy==0.18.0
+google-generativeai>=0.3.0
+numpy==1.24.3
+requests==2.31.0
+
+=== GIT LOG (Last 10 commits) ===
+c18ffed feat: Add back missing filters - Date of Birth, Country, Gender, Date From, Date To, Program
+9461583 feat: Update frontend with compliance-focused terminology
+dda748b fix: Revert to working google.generativeai import with model fallbacks
+f32be47 feat: Use new Gemini API client with gemini-2.0-flash model
+589f6b8 feat: Switch to Gemini AI API
+79d5bcc fix: Use Python 3.11 and compatible numpy version
+e55d94d fix: Use Python 3.11 and compatible numpy version
+4009561 fix: Use available supabase==2.24.0 and update OpenAI client
+7f2d358 feat: Switch to DeepSeek AI API with OpenAI compatibility
+ae10a0b feat: Switch to Gemini AI instead of OpenAI

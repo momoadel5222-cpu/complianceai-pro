@@ -4,6 +4,7 @@ from supabase import create_client, Client
 import os
 import logging
 from datetime import datetime
+from typing import List, Dict, Any
 from fuzzywuzzy import fuzz
 
 logging.basicConfig(level=logging.INFO)
@@ -16,6 +17,21 @@ SUPABASE_URL = os.environ.get('SUPABASE_URL', 'https://qwacsyreyuhhlvzcwhnw.supa
 SUPABASE_KEY = os.environ.get('SUPABASE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF3YWNzeXJleXVoaGx2emN3aG53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxNDIyNzgsImV4cCI6MjA3ODcxODI3OH0.dv17Wt-3YvG-JoExolq9jXsqVMWEyDHRu074LokO7es')
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY') or os.environ.get('OPENAI_API_KEY')
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# Initialize Groq AI
+GROQ_API_KEY = os.environ.get('GROQ_API_KEY')
+groq_client = None
+if GROQ_API_KEY:
+    try:
+        groq_client = OpenAI(
+            api_key=GROQ_API_KEY,
+            base_url="https://api.groq.com/openai/v1"
+        )
+        logger.info("✅ Groq AI initialized")
+    except Exception as e:
+        logger.warning(f"⚠️ Groq AI not available: {e}")
+else:
+    logger.warning("⚠️ GROQ_API_KEY not set - AI features disabled")
 
 # Only import Gemini if key is available
 if GEMINI_API_KEY:
@@ -71,6 +87,84 @@ def calculate_risk_score(entity, match_score):
     level = "CRITICAL" if risk_score >= 80 else "HIGH" if risk_score >= 60 else "MEDIUM" if risk_score >= 40 else "LOW"
     return {'score': round(risk_score, 1), 'level': level, 'factors': risk_factors}
 
+
+def explain_match_with_ai(query_name: str, matched_entity: Dict[str, Any]) -> str:
+    """Generate AI explanation for match using Groq"""
+    if not groq_client:
+        return "AI explanations unavailable - Groq API key not configured"
+    
+    try:
+        prompt = f"""As a sanctions compliance expert, explain why searching for "{query_name}" matched "{matched_entity.get('entity_name')}" from the {matched_entity.get('list_source')} sanctions list.
+
+Entity Details:
+- Type: {matched_entity.get('entity_type')}
+- Program: {matched_entity.get('program', 'N/A')}
+- Nationalities: {', '.join(matched_entity.get('nationalities', []) or ['N/A'])}
+
+Provide:
+1. Match reasoning (name similarity, aliases, etc.)
+2. Risk assessment (HIGH/MEDIUM/LOW)
+3. Recommended action
+
+Keep it concise (3-4 sentences max)."""
+
+        response = groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": "You are an expert sanctions compliance analyst. Provide clear, actionable risk assessments."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=200,
+            temperature=0.3
+        )
+        
+        return response.choices[0].message.content.strip()
+        
+    except Exception as e:
+        logger.error(f"Groq AI error: {e}")
+        return f"AI explanation failed: {str(e)}"
+
+def calculate_risk_score(entity: Dict[str, Any], match_score: float) -> Dict[str, Any]:
+    """Calculate comprehensive risk score"""
+    base_score = match_score * 50
+    
+    # Program-based risk
+    program = (entity.get('program') or '').lower()
+    if any(k in program for k in ['terrorism', 'proliferation', 'narcotics', 'taliban', 'isis']):
+        base_score += 35
+        severity = "CRITICAL"
+    elif any(k in program for k in ['weapons', 'wmd', 'military']):
+        base_score += 25
+        severity = "HIGH"
+    else:
+        base_score += 10
+        severity = "MEDIUM"
+    
+    # Source reliability
+    source = entity.get('list_source', '').upper()
+    if source in ['OFAC', 'UN']:
+        base_score += 15
+    elif source in ['EU', 'UK']:
+        base_score += 10
+    
+    final_score = min(100, base_score)
+    
+    if final_score >= 80:
+        level = "CRITICAL"
+    elif final_score >= 60:
+        level = "HIGH"
+    elif final_score >= 40:
+        level = "MEDIUM"
+    else:
+        level = "LOW"
+    
+    return {
+        'score': round(final_score, 1),
+        'level': level,
+        'program_severity': severity,
+        'source': source
+    }
+
 @app.route('/api/health', methods=['GET'])
 def health():
     return jsonify({
@@ -110,7 +204,7 @@ def sanctions_screen():
             query = supabase.table('sanctions_list').select('*')
             if entity_type != 'all':
                 query = query.eq('entity_type', entity_type)
-            query = query.or_(f'entity_name.ilike.%{name}%,aliases.cs.{{"{name}"}}')
+            query = query.ilike('entity_name', f'%{name}%')
             response = query.limit(100).execute()  # 🚀 Reduced from 300
             all_matches = response.data if response.data else []
             logger.info(f"Found {len(all_matches)} matches")
