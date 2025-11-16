@@ -16,7 +16,6 @@ CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 SUPABASE_URL = os.environ.get('SUPABASE_URL', 'https://qwacsyreyuhhlvzcwhnw.supabase.co')
 SUPABASE_KEY = os.environ.get('SUPABASE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF3YWNzeXJleXVoaGx2emN3aG53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxNDIyNzgsImV4cCI6MjA3ODcxODI3OH0.dv17Wt-3YvG-JoExolq9jXsqVMWEyDHRu074LokO7es')
-GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY') or os.environ.get('OPENAI_API_KEY')
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Initialize Groq AI
@@ -24,26 +23,12 @@ GROQ_API_KEY = os.environ.get('GROQ_API_KEY')
 groq_client = None
 if GROQ_API_KEY:
     try:
-        groq_client = Groq(
-            api_key=GROQ_API_KEY
-        )
+        groq_client = Groq(api_key=GROQ_API_KEY)
         logger.info("✅ Groq AI initialized")
     except Exception as e:
         logger.warning(f"⚠️ Groq AI not available: {e}")
 else:
     logger.warning("⚠️ GROQ_API_KEY not set - AI features disabled")
-
-# Only import Gemini if key is available
-if GEMINI_API_KEY:
-    try:
-        import google.generativeai as genai
-        genai.configure(api_key=GEMINI_API_KEY)
-        logger.info("✅ AI API key configured")
-    except ImportError:
-        logger.warning("google-generativeai not installed")
-        GEMINI_API_KEY = None
-else:
-    logger.warning("⚠️ AI API key not found - AI features disabled")
 
 def calculate_fuzzy_score(str1, str2):
     if not str1 or not str2: return 0.0
@@ -56,79 +41,39 @@ def calculate_fuzzy_score(str1, str2):
     token_set = fuzz.token_set_ratio(str1, str2) / 100.0
     return round((ratio * 0.2 + partial * 0.2 + token_sort * 0.3 + token_set * 0.3), 3)
 
-def explain_match_with_ai(query_name, matched_entity):
-    if not GEMINI_API_KEY: return None
-    try:
-        model = genai.GenerativeModel('gemini-2.0-flash-exp')
-        prompt = f"Why does '{query_name}' match '{matched_entity.get('entity_name')}' on {matched_entity.get('list_source')} list? Risk level? (2 sentences max)"
-        response = model.generate_content(prompt)
-        return response.text.strip()
-    except Exception as e:
-        logger.error(f"AI error: {e}")
-        return None
-
-def calculate_risk_score(entity, match_score):
-    risk_score = match_score * 40
-    risk_factors = []
-    program = (entity.get('program') or '').lower()
-    if any(k in program for k in ['terrorism', 'proliferation', 'narcotics', 'isis', 'taliban']): 
-        risk_score += 30
-        risk_factors.append(f"High-risk program: {entity.get('program')}")
-    elif program: 
-        risk_score += 15
-        risk_factors.append(f"Sanctioned program: {entity.get('program')}")
-    
-    source = (entity.get('list_source') or '').lower()
-    if any(s in source for s in ['ofac', 'un', 'eu']): 
-        risk_score += 20
-        risk_factors.append(f"Trusted source: {entity.get('list_source')}")
-    
-    risk_score = min(100, risk_score)
-    level = "CRITICAL" if risk_score >= 80 else "HIGH" if risk_score >= 60 else "MEDIUM" if risk_score >= 40 else "LOW"
-    return {'score': round(risk_score, 1), 'level': level, 'factors': risk_factors}
-
-
 def explain_match_with_ai(query_name: str, matched_entity: Dict[str, Any]) -> str:
-    """Generate AI explanation for match using Groq"""
+    """Generate AI explanation using Groq"""
     if not groq_client:
-        return "AI explanations unavailable - Groq API key not configured"
+        return "AI explanations unavailable"
     
     try:
-        prompt = f"""As a sanctions compliance expert, explain why searching for "{query_name}" matched "{matched_entity.get('entity_name')}" from the {matched_entity.get('list_source')} sanctions list.
+        prompt = f"""As a sanctions compliance expert, explain why "{query_name}" matched "{matched_entity.get('entity_name')}" from {matched_entity.get('list_source')}.
 
-Entity Details:
+Details:
 - Type: {matched_entity.get('entity_type')}
 - Program: {matched_entity.get('program', 'N/A')}
 - Nationalities: {', '.join(matched_entity.get('nationalities', []) or ['N/A'])}
 
-Provide:
-1. Match reasoning (name similarity, aliases, etc.)
-2. Risk assessment (HIGH/MEDIUM/LOW)
-3. Recommended action
-
-Keep it concise (3-4 sentences max)."""
+Provide: 1) Match reasoning, 2) Risk level (CRITICAL/HIGH/MEDIUM/LOW), 3) Recommendation. Max 4 sentences."""
 
         response = groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
-                {"role": "system", "content": "You are an expert sanctions compliance analyst. Provide clear, actionable risk assessments."},
+                {"role": "system", "content": "You are a sanctions compliance expert. Be concise and actionable."},
                 {"role": "user", "content": prompt}
             ],
             max_tokens=200,
             temperature=0.3
         )
-        
         return response.choices[0].message.content.strip()
-        
     except Exception as e:
         logger.error(f"Groq AI error: {e}")
-        return f"AI explanation failed: {str(e)}"
+        return f"AI explanation unavailable: {str(e)}"
 
 def calculate_risk_score(entity: Dict[str, Any], match_score: float) -> Dict[str, Any]:
     """Calculate comprehensive risk score"""
     base_score = match_score * 50
     
-    # Program-based risk
     program = (entity.get('program') or '').lower()
     if any(k in program for k in ['terrorism', 'proliferation', 'narcotics', 'taliban', 'isis']):
         base_score += 35
@@ -140,7 +85,6 @@ def calculate_risk_score(entity: Dict[str, Any], match_score: float) -> Dict[str
         base_score += 10
         severity = "MEDIUM"
     
-    # Source reliability
     source = entity.get('list_source', '').upper()
     if source in ['OFAC', 'UN']:
         base_score += 15
@@ -169,18 +113,13 @@ def calculate_risk_score(entity: Dict[str, Any], match_score: float) -> Dict[str
 def health():
     return jsonify({
         "status": "ok", 
-        "message": "Backend is running", 
-        "ai_features": "enabled" if GEMINI_API_KEY else "disabled", 
-        "version": "2.1-Fast"
+        "message": "Backend is running",
+        "ai_enabled": groq_client is not None
     }), 200
 
 @app.route('/', methods=['GET'])
 def root():
-    return jsonify({
-        "message": "ComplianceAI Backend API", 
-        "status": "running", 
-        "version": "2.1-Fast"
-    }), 200
+    return jsonify({"message": "ComplianceAI Backend API", "status": "running"}), 200
 
 @app.route('/api/sanctions/screen', methods=['POST', 'OPTIONS'])
 def sanctions_screen():
@@ -191,7 +130,7 @@ def sanctions_screen():
         data = request.get_json()
         name = data.get('name', '').strip()
         entity_type = data.get('type', 'individual')
-        use_ai = data.get('use_ai', False)  # 🚀 DEFAULT FALSE FOR SPEED
+        use_ai = data.get('use_ai', True)
         nationality_filter = data.get('nationality', '').strip()
         
         if not name:
@@ -199,20 +138,20 @@ def sanctions_screen():
         
         logger.info(f"Screening: {name} (type={entity_type}, ai={use_ai})")
         
-        # Fast database query
+        # Query database
         try:
             query = supabase.table('sanctions_list').select('*')
             if entity_type != 'all':
                 query = query.eq('entity_type', entity_type)
             query = query.ilike('entity_name', f'%{name}%')
-            response = query.limit(100).execute()  # 🚀 Reduced from 300
+            response = query.limit(100).execute()
             all_matches = response.data if response.data else []
             logger.info(f"Found {len(all_matches)} matches")
         except Exception as e:
             logger.error(f"DB error: {str(e)}")
             return jsonify({"success": False, "error": str(e)}), 500
         
-        # Fast fuzzy matching
+        # Filter and score matches
         matches = []
         for entity in all_matches:
             if nationality_filter:
@@ -223,7 +162,7 @@ def sanctions_screen():
             entity_name = entity.get('entity_name', '')
             name_score = calculate_fuzzy_score(name, entity_name)
             
-            # Check aliases (limit to first 5 for speed)
+            # Check aliases
             alias_scores = []
             for alias in (entity.get('aliases', []) or [])[:5]:
                 if alias:
@@ -246,10 +185,14 @@ def sanctions_screen():
         matches.sort(key=lambda x: x.get('combined_score', 0), reverse=True)
         matches = matches[:20]
         
-        # 🚀 Only generate AI explanation for TOP match if AI enabled
-        if use_ai and GEMINI_API_KEY and matches:
-            logger.info("Generating AI explanation for top match...")
-            matches[0]['ai_explanation'] = explain_match_with_ai(name, matches[0])
+        # Generate AI explanation for top 3 matches
+        if use_ai and groq_client and matches:
+            logger.info("Generating Groq AI explanations...")
+            for i, match in enumerate(matches[:3]):
+                try:
+                    match['ai_explanation'] = explain_match_with_ai(name, match)
+                except Exception as e:
+                    logger.error(f"AI failed for match {i}: {e}")
         
         # Determine status
         status = 'no_match'
@@ -266,7 +209,7 @@ def sanctions_screen():
                 "query": {
                     "name": name,
                     "type": entity_type,
-                    "ai_enabled": use_ai and GEMINI_API_KEY is not None
+                    "ai_enabled": use_ai and groq_client is not None
                 },
                 "timestamp": datetime.now().isoformat()
             }
