@@ -109,6 +109,50 @@ def calculate_risk_score(entity: Dict[str, Any], match_score: float) -> Dict[str
         'source': source
     }
 
+def search_database_flexible(name: str, entity_type: str) -> List[Dict]:
+    """Search database with multiple strategies for better recall"""
+    all_results = []
+    search_terms = []
+    
+    # Strategy 1: Full name
+    search_terms.append(name)
+    
+    # Strategy 2: Individual words (for names with multiple parts)
+    words = name.strip().split()
+    if len(words) > 1:
+        # Add significant words (> 3 chars)
+        search_terms.extend([w for w in words if len(w) > 3])
+    
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_terms = []
+    for term in search_terms:
+        term_lower = term.lower()
+        if term_lower not in seen:
+            seen.add(term_lower)
+            unique_terms.append(term)
+    
+    logger.info(f"Searching with terms: {unique_terms}")
+    
+    # Execute searches
+    for term in unique_terms[:4]:  # Limit to 4 searches to avoid timeout
+        try:
+            query = supabase.table('sanctions_list').select('*')
+            if entity_type != 'all':
+                query = query.eq('entity_type', entity_type)
+            query = query.ilike('entity_name', f'%{term}%')
+            response = query.limit(500).execute()
+            
+            if response.data:
+                all_results.extend(response.data)
+                logger.info(f"  '{term}': found {len(response.data)} matches")
+        except Exception as e:
+            logger.error(f"Search error for '{term}': {e}")
+    
+    # Remove duplicates based on ID
+    unique_results = {item['id']: item for item in all_results}.values()
+    return list(unique_results)
+
 @app.route('/api/health', methods=['GET'])
 def health():
     return jsonify({
@@ -138,15 +182,10 @@ def sanctions_screen():
         
         logger.info(f"Screening: {name} (type={entity_type}, ai={use_ai})")
         
-        # Query database
+        # Query database with flexible search
         try:
-            query = supabase.table('sanctions_list').select('*')
-            if entity_type != 'all':
-                query = query.eq('entity_type', entity_type)
-            query = query.ilike('entity_name', f'%{name}%')
-            response = query.limit(100).execute()
-            all_matches = response.data if response.data else []
-            logger.info(f"Found {len(all_matches)} matches")
+            all_matches = search_database_flexible(name, entity_type)
+            logger.info(f"Found {len(all_matches)} potential matches")
         except Exception as e:
             logger.error(f"DB error: {str(e)}")
             return jsonify({"success": False, "error": str(e)}), 500
@@ -170,7 +209,8 @@ def sanctions_screen():
             
             best_fuzzy = max([name_score] + alias_scores) if alias_scores else name_score
             
-            if best_fuzzy > 0.5:
+            # Lower threshold to 0.4 to catch more potential matches
+            if best_fuzzy > 0.4:
                 risk = calculate_risk_score(entity, best_fuzzy)
                 matches.append({
                     **entity,
@@ -218,6 +258,11 @@ def sanctions_screen():
     except Exception as e:
         logger.error(f"Error: {str(e)}", exc_info=True)
         return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/sanctions/history', methods=['GET'])
+def get_history():
+    """Get search history (placeholder)"""
+    return jsonify({"success": True, "data": []}), 200
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
