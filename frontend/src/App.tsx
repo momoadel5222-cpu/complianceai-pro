@@ -4,13 +4,14 @@ import Login from './Login';
 import Register from './Register';
 import ProtectedRoute from './ProtectedRoute';
 import ScreeningPage from './ScreeningPage';
+import Footer from './Footer';
 import { LogOut } from 'lucide-react';
 
 function Dashboard() {
   const { user, signOut } = useAuth();
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       <nav className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
           <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
@@ -30,7 +31,10 @@ function Dashboard() {
           </div>
         </div>
       </nav>
-      <ScreeningPage />
+      <div className="flex-grow">
+        <ScreeningPage />
+      </div>
+      <Footer />
     </div>
   );
 }
