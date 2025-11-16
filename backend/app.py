@@ -6,6 +6,7 @@ import logging
 from datetime import datetime
 from typing import List, Dict, Any
 from fuzzywuzzy import fuzz
+from groq import Groq
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
