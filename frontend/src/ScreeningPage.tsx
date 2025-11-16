@@ -1,500 +1,524 @@
-// File: frontend/src/ScreeningPage.tsx
-// Last updated: 1763300519
-import { useState, useRef } from 'react';
-import { Search, CheckCircle, Globe, Calendar, User, Building2, Hash, Filter, Upload, Download, X, Brain, AlertTriangle, Shield, Info } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import axios from 'axios';
+import { Search, AlertCircle, CheckCircle, XCircle, Download, Clock, History, Crown, Shield, Award } from 'lucide-react';
+import { useAuth } from './AuthContext';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://complianceai-backend-7n50.onrender.com/api';
+const API_BASE_URL = window.location.hostname === 'localhost' 
+  ? 'http://localhost:3000/api' 
+  : 'https://shiny-spoon-96qrv99gxxvf74pq-3000.app.github.dev/api';
 
-interface RiskAssessment {
-  score: number;
-  level: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
-  factors?: string[];  // Optional - might not be present
-}
-
-interface SanctionMatch {
+interface Match {
+  id: string;
   entity_name: string;
   entity_type: string;
-  program: string;
   list_source: string;
-  nationalities?: string[];  // Optional
-  aliases?: string[];  // Optional
-  match_score: number;
-  best_fuzzy_score: number;
-  semantic_score?: number;
-  combined_score: number;
-  risk_assessment: RiskAssessment;
-  ai_explanation?: string;
+  program: string;
+  nationalities: string[];
+  date_listed: string;
+  aliases: string[];
+  best_score: number;
+  remarks?: string;
+  date_of_birth_text?: string;
+  // PEP fields
+  is_pep?: boolean;
+  pep_level?: 'direct' | 'associate' | 'family';
+  position?: string;
+  jurisdiction?: string;
+  risk_score?: number;
 }
 
-interface ScreeningResults {
+interface SearchResult {
   screening_id: string;
-  status: 'match' | 'potential_match' | 'low_confidence_match' | 'no_match';
-  matches: SanctionMatch[];
-  query: {
-    name: string;
-    type: string;
-    ai_enabled: boolean;
-    ai_provider?: string;
-  };
-  timestamp: string;
+  status: 'match' | 'potential_match' | 'no_match';
+  matches: Match[];
 }
 
-function ScreeningPage() {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [entityType, setEntityType] = useState('individual');
-  const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState<ScreeningResults | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [searchHistory, setSearchHistory] = useState<any[]>([]);
-  
-  // Advanced filters
-  const [showFilters, setShowFilters] = useState(false);
-  const [nationality, setNationality] = useState('');
-  const [dateOfBirth, setDateOfBirth] = useState('');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
-  const [program, setProgram] = useState('');
-  const [minScore, setMinScore] = useState(0.6);
-  const [country, setCountry] = useState('');
-  const [gender, setGender] = useState('');
-  
-  // AI Features
-  const [useAI, setUseAI] = useState(true);
-  const [showAIExplanations, setShowAIExplanations] = useState(true);
+interface HistoryItem {
+  id: string;
+  search_term: string;
+  search_type: string;
+  status: string;
+  match_count: number;
+  highest_match_score: number;
+  created_at: string;
+}
 
-  const handleSearch = async () => {
-    if (!searchTerm.trim()) return;
+export default function ScreeningPage() {
+  const { session } = useAuth();
+  const [entityName, setEntityName] = useState('');
+  const [entityType, setEntityType] = useState<'individual' | 'entity'>('individual');
+  const [searchFilter, setSearchFilter] = useState<'all' | 'sanctions' | 'peps'>('all');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<SearchResult | null>(null);
+  const [searchHistory, setSearchHistory] = useState<HistoryItem[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (session?.access_token) {
+      fetchSearchHistory();
+    }
+  }, [session]);
+
+  const fetchSearchHistory = async () => {
+    if (!session?.access_token) return;
+    
+    try {
+      const response = await axios.get(`${API_BASE_URL}/sanctions/history`, {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`
+        }
+      });
+      setSearchHistory(response.data.data || []);
+    } catch (error) {
+      console.error('Error fetching history:', error);
+    }
+  };
+
+  const handleScreen = async () => {
+    if (!entityName.trim()) {
+      setError('Please enter a name to search');
+      return;
+    }
+
     setLoading(true);
     setError(null);
-    setResults(null);
-
+    setResult(null);
+    
     try {
-      const payload: any = { 
-        name: searchTerm, 
-        type: entityType,
-        use_ai: useAI
-      };
-      
-      if (nationality) payload.nationality = nationality;
-      if (dateOfBirth) payload.date_of_birth = dateOfBirth;
-      if (dateFrom) payload.date_from = dateFrom;
-      if (dateTo) payload.date_to = dateTo;
-      if (program) payload.program = program;
-      if (country) payload.country = country;
-      if (gender) payload.gender = gender;
+      const headers = session?.access_token ? {
+        Authorization: `Bearer ${session.access_token}`
+      } : {};
 
-      console.log('🔍 Searching with Compliance AI:', useAI, 'Payload:', payload);
-      
-      const response = await fetch(`${API_BASE_URL}/sanctions/screen`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      const response = await axios.post(
+        `${API_BASE_URL}/sanctions/screen`,
+        {
+          name: entityName,
+          type: entityType,
         },
-        body: JSON.stringify(payload),
-      });
+        { headers }
+      );
 
-      const data = await response.json();
-      
-      if (data.success) {
-        setResults({
-          ...data.data,
-          matches: data.data.matches || []
+      if (response.data.success) {
+        let filteredMatches = response.data.data.matches;
+        
+        // Apply filter
+        if (searchFilter === 'sanctions') {
+          filteredMatches = filteredMatches.filter((m: Match) => !m.is_pep);
+        } else if (searchFilter === 'peps') {
+          filteredMatches = filteredMatches.filter((m: Match) => m.is_pep);
+        }
+        
+        setResult({
+          ...response.data.data,
+          matches: filteredMatches
         });
-        setSearchHistory(prev => [data.data, ...prev.slice(0, 9)]);
+        
+        if (session?.access_token) {
+          setTimeout(() => fetchSearchHistory(), 1000);
+        }
       } else {
-        setError(data.error || 'Search failed');
+        setError(response.data.error || 'Search failed');
       }
     } catch (err) {
-      setError('Network error: ' + (err as Error).message);
+      console.error('Screening error:', err);
+      if (axios.isAxiosError(err)) {
+        setError(err.response?.data?.error || err.message || 'Connection error');
+      } else {
+        setError('An unexpected error occurred');
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const getRiskBadgeColor = (level: string) => {
-    switch (level) {
-      case 'CRITICAL': return 'bg-red-100 text-red-800 border-red-300';
-      case 'HIGH': return 'bg-orange-100 text-orange-800 border-orange-300';
-      case 'MEDIUM': return 'bg-yellow-100 text-yellow-800 border-yellow-300';
-      case 'LOW': return 'bg-green-100 text-green-800 border-green-300';
-      default: return 'bg-gray-100 text-gray-800 border-gray-300';
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'match': return 'bg-red-50 border-red-200 text-red-800';
+      case 'potential_match': return 'bg-yellow-50 border-yellow-200 text-yellow-800';
+      case 'no_match': return 'bg-green-50 border-green-200 text-green-800';
+      default: return 'bg-gray-50 border-gray-200 text-gray-800';
     }
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'match': return 'bg-red-100 text-red-800';
-      case 'potential_match': return 'bg-orange-100 text-orange-800';
-      case 'low_confidence_match': return 'bg-yellow-100 text-yellow-800';
-      case 'no_match': return 'bg-green-100 text-green-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'match': return <AlertCircle className="w-6 h-6 text-red-600" />;
+      case 'potential_match': return <AlertCircle className="w-6 h-6 text-yellow-600" />;
+      case 'no_match': return <CheckCircle className="w-6 h-6 text-green-600" />;
+      default: return <XCircle className="w-6 h-6 text-gray-600" />;
     }
+  };
+
+  const getPepBadge = (pepLevel?: string) => {
+    if (!pepLevel) return null;
+    
+    const badges = {
+      direct: { color: 'bg-purple-100 text-purple-800', icon: <Crown className="w-3 h-3" />, text: 'Direct PEP' },
+      associate: { color: 'bg-blue-100 text-blue-800', icon: <Award className="w-3 h-3" />, text: 'PEP Associate' },
+      family: { color: 'bg-indigo-100 text-indigo-800', icon: <Award className="w-3 h-3" />, text: 'PEP Family' },
+    };
+    
+    const badge = badges[pepLevel as keyof typeof badges] || badges.direct;
+    
+    return (
+      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-bold ${badge.color}`}>
+        {badge.icon}
+        {badge.text}
+      </span>
+    );
+  };
+
+  const getRiskBadge = (riskScore?: number, isPep?: boolean, listSource?: string) => {
+    // Calculate risk if not provided
+    let score = riskScore || 0;
+    if (!riskScore) {
+      if (listSource?.includes('OFAC') || listSource?.includes('UN')) score += 80;
+      if (isPep) score += 50;
+    }
+    
+    if (score >= 80) {
+      return <span className="px-2 py-1 bg-red-100 text-red-800 text-xs font-bold rounded">HIGH RISK</span>;
+    } else if (score >= 50) {
+      return <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-bold rounded">MEDIUM RISK</span>;
+    } else {
+      return <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-bold rounded">LOW RISK</span>;
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">
-            ComplianceAI Screening
-          </h1>
-          <p className="text-lg text-gray-600">
-            Advanced sanctions screening with compliance-enhanced risk assessment
-          </p>
-        </div>
-
-        {/* Search Card */}
-        <div className="bg-white rounded-2xl shadow-xl p-6 mb-8">
-          <div className="flex flex-col lg:flex-row gap-4 mb-4">
-            <div className="flex-1">
-              <input
-                type="text"
-                placeholder="Enter name to screen..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-            
-            <select
-              value={entityType}
-              onChange={(e) => setEntityType(e.target.value)}
-              className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All Types</option>
-              <option value="individual">Individual</option>
-              <option value="entity">Entity</option>
-              <option value="vessel">Vessel</option>
-            </select>
-
-            <button
-              onClick={handleSearch}
-              disabled={loading || !searchTerm.trim()}
-              className="px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            >
-              {loading ? (
-                <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
-              ) : (
-                <Search size={16} />
-              )}
-              {loading ? 'Screening...' : 'Screen'}
-            </button>
-          </div>
-
-          {/* Compliance Enhanced Toggle and Filters */}
-          <div className="flex flex-wrap gap-4 items-center">
-            {/* Compliance Enhanced Toggle */}
-            <div className="flex items-center gap-2 bg-blue-50 rounded-lg px-4 py-2">
-              <Shield size={18} className="text-blue-600" />
-              <span className="text-sm font-medium text-gray-700">Compliance Enhanced</span>
-              <label className="relative inline-flex items-center cursor-pointer ml-2">
-                <input
-                  type="checkbox"
-                  checked={useAI}
-                  onChange={(e) => setUseAI(e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-              </label>
+    <div className="max-w-7xl mx-auto p-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Main Search Section */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Search Card */}
+          <div className="bg-white rounded-2xl shadow-lg p-8">
+            <div className="flex items-center gap-3 mb-6">
+              <Search className="w-6 h-6 text-blue-600" />
+              <h2 className="text-2xl font-bold text-gray-900">Screen Entity</h2>
             </div>
 
-            {/* Filters Toggle */}
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-            >
-              <Filter size={16} />
-              Filters
-            </button>
-
-            {/* Compliance Explanations Toggle */}
-            {useAI && (
-              <button
-                onClick={() => setShowAIExplanations(!showAIExplanations)}
-                className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-              >
-                <Info size={16} />
-                {showAIExplanations ? 'Hide Compliance' : 'Show Compliance'} Explanations
-              </button>
-            )}
-          </div>
-
-          {/* Advanced Filters */}
-          {showFilters && (
-            <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {error && (
+              <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Nationality
-                  </label>
-                  <input
-                    type="text"
-                    value={nationality}
-                    onChange={(e) => setNationality(e.target.value)}
-                    placeholder="e.g., Russian"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Country
-                  </label>
-                  <input
-                    type="text"
-                    value={country}
-                    onChange={(e) => setCountry(e.target.value)}
-                    placeholder="e.g., Russia"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Date of Birth
-                  </label>
-                  <input
-                    type="date"
-                    value={dateOfBirth}
-                    onChange={(e) => setDateOfBirth(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Gender
-                  </label>
-                  <select
-                    value={gender}
-                    onChange={(e) => setGender(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">All Genders</option>
-                    <option value="male">Male</option>
-                    <option value="female">Female</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Date From
-                  </label>
-                  <input
-                    type="date"
-                    value={dateFrom}
-                    onChange={(e) => setDateFrom(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Date To
-                  </label>
-                  <input
-                    type="date"
-                    value={dateTo}
-                    onChange={(e) => setDateTo(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Program
-                  </label>
-                  <input
-                    type="text"
-                    value={program}
-                    onChange={(e) => setProgram(e.target.value)}
-                    placeholder="e.g., OFAC"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Min Score
-                  </label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.1"
-                    value={minScore}
-                    onChange={(e) => setMinScore(parseFloat(e.target.value))}
-                    className="w-full"
-                  />
-                  <span className="text-sm text-gray-600">{minScore}</span>
+                  <p className="text-sm font-semibold text-red-800">Error</p>
+                  <p className="text-sm text-red-700">{error}</p>
                 </div>
               </div>
+            )}
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Entity Name
+                </label>
+                <input
+                  type="text"
+                  value={entityName}
+                  onChange={(e) => setEntityName(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleScreen()}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Enter name or organization..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Entity Type
+                </label>
+                <div className="grid grid-cols-2 gap-4">
+                  <button
+                    onClick={() => setEntityType('individual')}
+                    className={`px-4 py-3 border-2 rounded-lg font-medium transition ${
+                      entityType === 'individual'
+                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                        : 'border-gray-300 text-gray-700 hover:border-gray-400'
+                    }`}
+                  >
+                    👤 Individual
+                  </button>
+                  <button
+                    onClick={() => setEntityType('entity')}
+                    className={`px-4 py-3 border-2 rounded-lg font-medium transition ${
+                      entityType === 'entity'
+                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                        : 'border-gray-300 text-gray-700 hover:border-gray-400'
+                    }`}
+                  >
+                    🏢 Organization
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Search Filter
+                </label>
+                <div className="grid grid-cols-3 gap-3">
+                  <button
+                    onClick={() => setSearchFilter('all')}
+                    className={`px-3 py-2 border-2 rounded-lg text-sm font-medium transition ${
+                      searchFilter === 'all'
+                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                        : 'border-gray-300 text-gray-700 hover:border-gray-400'
+                    }`}
+                  >
+                    All
+                  </button>
+                  <button
+                    onClick={() => setSearchFilter('sanctions')}
+                    className={`px-3 py-2 border-2 rounded-lg text-sm font-medium transition ${
+                      searchFilter === 'sanctions'
+                        ? 'border-red-500 bg-red-50 text-red-700'
+                        : 'border-gray-300 text-gray-700 hover:border-gray-400'
+                    }`}
+                  >
+                    <Shield className="w-4 h-4 inline mr-1" />
+                    Sanctions
+                  </button>
+                  <button
+                    onClick={() => setSearchFilter('peps')}
+                    className={`px-3 py-2 border-2 rounded-lg text-sm font-medium transition ${
+                      searchFilter === 'peps'
+                        ? 'border-purple-500 bg-purple-50 text-purple-700'
+                        : 'border-gray-300 text-gray-700 hover:border-gray-400'
+                    }`}
+                  >
+                    <Crown className="w-4 h-4 inline mr-1" />
+                    PEPs
+                  </button>
+                </div>
+              </div>
+
+              <button
+                onClick={handleScreen}
+                disabled={loading || !entityName.trim()}
+                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-4 rounded-lg font-semibold hover:from-blue-700 hover:to-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    Screening...
+                  </>
+                ) : (
+                  <>
+                    <Search className="w-5 h-5" />
+                    Run Sanctions & PEP Screen
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Results */}
+          {result && (
+            <div className={`rounded-2xl shadow-lg p-6 border-2 ${getStatusColor(result.status)}`}>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  {getStatusIcon(result.status)}
+                  <div>
+                    <h3 className="text-xl font-bold capitalize">{result.status.replace('_', ' ')}</h3>
+                    <p className="text-sm opacity-75">
+                      {result.matches.length} match{result.matches.length !== 1 ? 'es' : ''} found
+                      {result.matches.length > 0 && ' - Review required'}
+                    </p>
+                  </div>
+                </div>
+                <button className="flex items-center gap-2 px-4 py-2 bg-white rounded-lg hover:bg-gray-50 transition">
+                  <Download className="w-4 h-4" />
+                  Export
+                </button>
+              </div>
+
+              {result.matches.length > 0 && (
+                <div className="mt-6 space-y-4">
+                  <h4 className="font-bold text-lg flex items-center gap-2">
+                    📋 Detailed Match Analysis
+                  </h4>
+                  {result.matches.map((match, idx) => (
+                    <div key={match.id} className="bg-white rounded-lg p-6 shadow">
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="flex-1">
+                          <div className="flex flex-wrap items-center gap-2 mb-2">
+                            <span className="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-1 rounded">
+                              Match #{idx + 1}
+                            </span>
+                            <span className="bg-gray-100 text-gray-800 text-xs font-bold px-2 py-1 rounded">
+                              {match.entity_type}
+                            </span>
+                            {match.is_pep && getPepBadge(match.pep_level)}
+                            {getRiskBadge(match.risk_score, match.is_pep, match.list_source)}
+                          </div>
+                          <h5 className="text-xl font-bold text-gray-900 mb-1">{match.entity_name}</h5>
+                          <p className="text-sm text-gray-600">
+                            Source: {match.list_source} • Program: {match.program}
+                          </p>
+                        </div>
+                        <div className="text-right ml-4">
+                          <div className="text-3xl font-bold text-blue-600">
+                            {(match.best_score * 100).toFixed(1)}%
+                          </div>
+                          <p className="text-xs text-gray-600">Confidence</p>
+                        </div>
+                      </div>
+
+                      {/* PEP Specific Info */}
+                      {match.is_pep && (
+                        <div className="mb-4 p-4 bg-purple-50 rounded-lg border border-purple-200">
+                          <h6 className="font-semibold text-purple-900 mb-2 flex items-center gap-2">
+                            <Crown className="w-4 h-4" />
+                            PEP Information
+                          </h6>
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+                            {match.position && (
+                              <div>
+                                <p className="text-purple-700 font-medium">Position</p>
+                                <p className="text-purple-900">{match.position}</p>
+                              </div>
+                            )}
+                            {match.jurisdiction && (
+                              <div>
+                                <p className="text-purple-700 font-medium">Jurisdiction</p>
+                                <p className="text-purple-900">{match.jurisdiction}</p>
+                              </div>
+                            )}
+                            <div>
+                              <p className="text-purple-700 font-medium">PEP Level</p>
+                              <p className="text-purple-900 capitalize">{match.pep_level || 'Direct'}</p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div>
+                          <p className="text-gray-600 mb-1">🌍 Nationalities</p>
+                          <p className="font-semibold">
+                            {match.nationalities?.length > 0 ? match.nationalities.join(', ') : 'N/A'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-600 mb-1">📅 Date Listed</p>
+                          <p className="font-semibold">{match.date_listed || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-600 mb-1">🎯 Program</p>
+                          <p className="font-semibold">{match.program}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-600 mb-1">📊 Match Score</p>
+                          <p className="font-semibold">{(match.best_score * 100).toFixed(1)}%</p>
+                        </div>
+                      </div>
+
+                      {match.aliases && match.aliases.length > 0 && (
+                        <div className="mt-4">
+                          <p className="text-sm text-gray-600 mb-2">Aliases:</p>
+                          <div className="flex flex-wrap gap-2">
+                            {match.aliases.slice(0, 10).map((alias, i) => (
+                              <span key={i} className="bg-gray-100 px-2 py-1 rounded text-sm">
+                                {alias}
+                              </span>
+                            ))}
+                            {match.aliases.length > 10 && (
+                              <span className="text-sm text-gray-500">+{match.aliases.length - 10} more</span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
 
-        {/* Results */}
-        {results && (
-          <div className="space-y-6">
-            {/* Summary Card */}
-            <div className="bg-white rounded-2xl shadow-xl p-6">
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div>
-                  <h2 className="text-xl font-semibold text-gray-900 mb-2">
-                    Screening Results
-                  </h2>
-                  <div className="flex items-center gap-4 text-sm text-gray-600">
-                    <span>Query: <strong>{results.query.name}</strong></span>
-                    <span>Type: <strong>{results.query.type}</strong></span>
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(results.status)}`}>
-                      {results.status.replace(/_/g, ' ').toUpperCase()}
-                    </span>
-                    {results.query.ai_enabled && (
-                      <span className="flex items-center gap-1 text-blue-600">
-                        <Shield size={14} />
-                        Compliance Enhanced ({results.query.ai_provider || 'Gemini'})
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="text-sm text-gray-500">
-                  {new Date(results.timestamp).toLocaleString()}
-                </div>
+        {/* Sidebar */}
+        <div className="space-y-6">
+          {/* Coverage Panel */}
+          <div className="bg-white rounded-2xl shadow-lg p-6">
+            <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+              🛡️ Coverage
+            </h3>
+            <div className="space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-700">OFAC Sanctions</span>
+                <span className="text-xs font-semibold text-green-600 bg-green-50 px-2 py-1 rounded">
+                  Active
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-700">UN Sanctions</span>
+                <span className="text-xs font-semibold text-green-600 bg-green-50 px-2 py-1 rounded">
+                  Active
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-700 flex items-center gap-1">
+                  <Crown className="w-3 h-3" />
+                  PEP Database
+                </span>
+<span className="text-xs font-semibold text-green-600 bg-green-50 px-2 py-1 rounded">
+                  Active
+                </span>
               </div>
             </div>
+          </div>
 
-            {/* Matches */}
-            {(results?.matches && results.matches.length > 0) ? (
-              <div className="space-y-4">
-                {(results?.matches || []).map((match, index) => (
-                  <div key={index} className="bg-white rounded-2xl shadow-xl p-6 border-l-4 border-blue-500">
-                    <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4 mb-4">
+          {/* Search History */}
+          {searchHistory.length > 0 && (
+            <div className="bg-white rounded-2xl shadow-lg p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-lg flex items-center gap-2">
+                  <History className="w-5 h-5" />
+                  Recent Searches
+                </h3>
+                <button
+                  onClick={() => setShowHistory(!showHistory)}
+                  className="text-sm text-blue-600 hover:text-blue-700"
+                >
+                  {showHistory ? 'Hide' : 'Show All'}
+                </button>
+              </div>
+              <div className="space-y-2">
+                {searchHistory.slice(0, showHistory ? undefined : 5).map((item) => (
+                  <div key={item.id} className="py-2 border-b last:border-0">
+                    <div className="flex justify-between items-start">
                       <div className="flex-1">
-                        <div className="flex items-start justify-between mb-2">
-                          <h3 className="text-lg font-semibold text-gray-900">
-                            {match.entity_name}
-                          </h3>
-                          <div className="flex items-center gap-2">
-                            <span className={`px-3 py-1 rounded-full text-sm font-medium border ${getRiskBadgeColor(match.risk_assessment.level)}`}>
-                              {match.risk_assessment.level} RISK
-                            </span>
-                            <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
-                              {match.risk_assessment.score}%
-                            </span>
-                          </div>
-                        </div>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                          <div className="space-y-2">
-                            <div className="flex items-center gap-2 text-sm text-gray-600">
-                              <Building2 size={14} />
-                              <span>{match.entity_type}</span>
-                            </div>
-                            <div className="flex items-center gap-2 text-sm text-gray-600">
-                              <Shield size={14} />
-                              <span>{match.program}</span>
-                            </div>
-                            <div className="flex items-center gap-2 text-sm text-gray-600">
-                              <Globe size={14} />
-                              <span>{match.list_source}</span>
-                            </div>
-                          </div>
-                          
-                          <div className="space-y-2">
-                            <div className="text-sm">
-                              <span className="font-medium">Match Score: </span>
-                              <span className="text-blue-600">{match.match_score}</span>
-                            </div>
-                            <div className="text-sm">
-                              <span className="font-medium">Fuzzy Score: </span>
-                              <span className="text-green-600">{match.best_fuzzy_score}</span>
-                            </div>
-                            {match.semantic_score && (
-                              <div className="text-sm">
-                                <span className="font-medium">Semantic Score: </span>
-                                <span className="text-purple-600">{match.semantic_score}</span>
-                              </div>
-                            )}
-                            <div className="text-sm">
-                              <span className="font-medium">Combined: </span>
-                              <span className="text-orange-600 font-semibold">{match.combined_score}</span>
-                            </div>
-                          </div>
-                          
-                          <div className="space-y-2">
-                            {match.nationalities && match.nationalities.length > 0 && (
-                              <div className="text-sm">
-                                <span className="font-medium">Nationalities: </span>
-                                <span>{(match.nationalities || []).join(', ')}</span>
-                              </div>
-                            )}
-                            {match.aliases && match.aliases.length > 0 && (
-                              <div className="text-sm">
-                                <span className="font-medium">Aliases: </span>
-                                <span>{(match.aliases || []).slice(0, 3).join(', ')}</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Risk Factors */}
-                        {(match.risk_assessment?.factors && match.risk_assessment.factors.length > 0) && (
-                          <div className="mb-4">
-                            <h4 className="text-sm font-medium text-gray-700 mb-2">Risk Factors:</h4>
-                            <div className="flex flex-wrap gap-2">
-                              {(match.risk_assessment?.factors || []).map((factor, factorIndex) => (
-                                <span key={factorIndex} className="px-2 py-1 bg-red-50 text-red-700 rounded text-xs">
-                                  {factor}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Compliance Explanation */}
-                        {useAI && showAIExplanations && match.ai_explanation && (
-                          <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                            <div className="flex items-center gap-2 mb-2">
-                              <Shield size={16} className="text-blue-600" />
-                              <h4 className="text-sm font-medium text-blue-900">Compliance Analysis</h4>
-                            </div>
-                            <p className="text-sm text-blue-800 leading-relaxed">
-                              {match.ai_explanation}
-                            </p>
-                          </div>
-                        )}
+                        <p className="text-sm font-semibold text-gray-700 truncate">
+                          {item.search_term}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {formatDate(item.created_at)}
+                        </p>
                       </div>
+                      <span className={`text-xs font-semibold px-2 py-1 rounded ml-2 ${
+                        item.status === 'match' ? 'bg-red-100 text-red-700' :
+                        item.status === 'potential_match' ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-green-100 text-green-700'
+                      }`}>
+                        {item.match_count} match{item.match_count !== 1 ? 'es' : ''}
+                      </span>
                     </div>
                   </div>
                 ))}
               </div>
-            ) : (
-              <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
-                <CheckCircle size={48} className="mx-auto text-green-500 mb-4" />
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">No Matches Found</h3>
-                <p className="text-gray-600">
-                  No sanctions matches found for "{results.query.name}" with the current filters.
-                </p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Error Display */}
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-2xl p-6">
-            <div className="flex items-center gap-2 text-red-800 mb-2">
-              <AlertTriangle size={20} />
-              <h3 className="font-semibold">Error</h3>
             </div>
-            <p className="text-red-700">{error}</p>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
 }
-
-export default ScreeningPage;

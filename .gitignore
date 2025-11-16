@@ -1,38 +1,55 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-env/
-venv/
-ENV/
-.venv
-*.egg-info/
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Testing
+coverage/
+
+# Production
 dist/
 build/
 
-# Environment
+# Environment variables
 .env
 .env.local
+.env.development.local
+.env.test.local
+.env.production.local
+backend/.env
+frontend/.env
 
-# IDEs
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# Editor
 .vscode/
 .idea/
+*.swp
+*.swo
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Node
-node_modules/
-.next/
-out/
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
 
-# Environment files
-.env
-.env.local
-frontend/.env
-frontend/.env.local
-backend/.env
-frontend/.env
+# Data files (optional)
+data/*.csv
+data/*.xml
+data/*.json
+!data/.gitkeep
+
+# Backups
+*.backup.tsx
+*.old.tsx
+*.backup.*
