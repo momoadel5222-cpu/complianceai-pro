@@ -7,7 +7,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://complianceai-backe
 interface RiskAssessment {
   score: number;
   level: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
-  factors: string[];
+  factors?: string[];  // Optional - might not be present
 }
 
 interface SanctionMatch {
@@ -15,8 +15,8 @@ interface SanctionMatch {
   entity_type: string;
   program: string;
   list_source: string;
-  nationalities: string[];
-  aliases: string[];
+  nationalities?: string[];  // Optional
+  aliases?: string[];  // Optional
   match_score: number;
   best_fuzzy_score: number;
   semantic_score?: number;
@@ -426,24 +426,24 @@ function ScreeningPage() {
                             {match.nationalities && match.nationalities.length > 0 && (
                               <div className="text-sm">
                                 <span className="font-medium">Nationalities: </span>
-                                <span>{match.nationalities.join(', ')}</span>
+                                <span>{(match.nationalities || []).join(', ')}</span>
                               </div>
                             )}
                             {match.aliases && match.aliases.length > 0 && (
                               <div className="text-sm">
                                 <span className="font-medium">Aliases: </span>
-                                <span>{match.aliases.slice(0, 3).join(', ')}</span>
+                                <span>{(match.aliases || []).slice(0, 3).join(', ')}</span>
                               </div>
                             )}
                           </div>
                         </div>
 
                         {/* Risk Factors */}
-                        {match.risk_assessment.factors.length > 0 && (
+                        {(match.risk_assessment?.factors && match.risk_assessment.factors.length > 0) && (
                           <div className="mb-4">
                             <h4 className="text-sm font-medium text-gray-700 mb-2">Risk Factors:</h4>
                             <div className="flex flex-wrap gap-2">
-                              {match.risk_assessment.factors.map((factor, factorIndex) => (
+                              {(match.risk_assessment?.factors || []).map((factor, factorIndex) => (
                                 <span key={factorIndex} className="px-2 py-1 bg-red-50 text-red-700 rounded text-xs">
                                   {factor}
                                 </span>
