@@ -4,7 +4,7 @@ from supabase import create_client, Client
 import os
 import logging
 from datetime import datetime
-from google import genai
+import google.generativeai as genai
 from fuzzywuzzy import fuzz
 import numpy as np
 
@@ -19,11 +19,9 @@ SUPABASE_KEY = os.environ.get('SUPABASE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXV
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# Initialize Gemini client
-gemini_client = None
 if GEMINI_API_KEY:
-    gemini_client = genai.Client(api_key=GEMINI_API_KEY)
-    logger.info("✅ Gemini API key configured with new client")
+    genai.configure(api_key=GEMINI_API_KEY)
+    logger.info("✅ Gemini API key configured")
 else:
     logger.warning("⚠️ Gemini API key not found - AI features disabled")
 
@@ -36,8 +34,14 @@ def calculate_fuzzy_score(str1, str2):
                   fuzz.token_sort_ratio(str1, str2) * 0.3 + fuzz.token_set_ratio(str1, str2) * 0.3) / 100.0, 3)
 
 def explain_match_with_gemini(query_name, matched_entity):
-    if not gemini_client: return "AI explanation unavailable"
+    if not GEMINI_API_KEY: return "AI explanation unavailable"
     try:
+        # Try gemini-1.0-pro first, then fallback to gemini-pro
+        try:
+            model = genai.GenerativeModel('gemini-1.0-pro')
+        except:
+            model = genai.GenerativeModel('gemini-pro')
+        
         prompt = f"""Analyze this sanctions match for compliance screening:
 
 QUERY: {query_name}
@@ -53,16 +57,18 @@ Provide a concise 2-3 sentence analysis explaining:
 2. Key compliance risks and confidence level
 3. Recommended next steps for due diligence"""
 
-        response = gemini_client.models.generate_content(
-            model="gemini-2.0-flash",  # Using the available model
-            contents=prompt
+        response = model.generate_content(
+            prompt,
+            generation_config=genai.types.GenerationConfig(
+                temperature=0.3,
+                max_output_tokens=200
+            )
         )
-        
         return response.text.strip()
     except Exception as e:
         logger.error(f"Gemini explanation error: {e}")
-        # Return a fallback explanation
-        return f"Match analysis: Name similarity with {matched_entity.get('entity_name')} scored {matched_entity.get('combined_score', 0)}. Consider verifying aliases and checking the sanctions program: {matched_entity.get('program', 'N/A')}."
+        # Return a helpful fallback explanation
+        return f"AI Analysis: This match with '{matched_entity.get('entity_name')}' has a similarity score of {matched_entity.get('combined_score', 0)}. The entity is listed under '{matched_entity.get('program', 'N/A')}' program. Consider reviewing aliases and verifying against official sources."
 
 def calculate_risk_score(entity, match_score, semantic_score=None):
     risk_score = match_score * 40
@@ -106,7 +112,7 @@ def health():
         "message": "Backend is running",
         "ai_features": "enabled" if GEMINI_API_KEY else "disabled",
         "ai_provider": "Gemini",
-        "version": "2.0-Gemini-New-Client"
+        "version": "2.0-Gemini-Fixed"
     }), 200
 
 @app.route('/', methods=['GET'])
@@ -114,7 +120,7 @@ def root():
     return jsonify({
         "message": "ComplianceAI Backend API",
         "status": "running",
-        "version": "2.0-Gemini-New-Client",
+        "version": "2.0-Gemini-Fixed",
         "ai_provider": "Google Gemini"
     }), 200
 
