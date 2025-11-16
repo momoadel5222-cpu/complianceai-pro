@@ -43,7 +43,7 @@ def calculate_fuzzy_score(str1, str2):
 def explain_match_with_ai(query_name, matched_entity):
     if not GEMINI_API_KEY: return None
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.0-flash-exp')
         prompt = f"Why does '{query_name}' match '{matched_entity.get('entity_name')}' on {matched_entity.get('list_source')} list? Risk level? (2 sentences max)"
         response = model.generate_content(prompt)
         return response.text.strip()
