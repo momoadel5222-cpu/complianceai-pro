@@ -54,6 +54,8 @@ function ScreeningPage() {
   const [dateTo, setDateTo] = useState('');
   const [program, setProgram] = useState('');
   const [minScore, setMinScore] = useState(0.6);
+  const [country, setCountry] = useState('');
+  const [gender, setGender] = useState('');
   
   // AI Features
   const [useAI, setUseAI] = useState(true);
@@ -77,6 +79,8 @@ function ScreeningPage() {
       if (dateFrom) payload.date_from = dateFrom;
       if (dateTo) payload.date_to = dateTo;
       if (program) payload.program = program;
+      if (country) payload.country = country;
+      if (gender) payload.gender = gender;
 
       console.log('🔍 Searching with Compliance AI:', useAI, 'Payload:', payload);
       
@@ -226,6 +230,83 @@ function ScreeningPage() {
                     value={nationality}
                     onChange={(e) => setNationality(e.target.value)}
                     placeholder="e.g., Russian"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Country
+                  </label>
+                  <input
+                    type="text"
+                    value={country}
+                    onChange={(e) => setCountry(e.target.value)}
+                    placeholder="e.g., Russia"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Date of Birth
+                  </label>
+                  <input
+                    type="date"
+                    value={dateOfBirth}
+                    onChange={(e) => setDateOfBirth(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Gender
+                  </label>
+                  <select
+                    value={gender}
+                    onChange={(e) => setGender(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">All Genders</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Date From
+                  </label>
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Date To
+                  </label>
+                  <input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Program
+                  </label>
+                  <input
+                    type="text"
+                    value={program}
+                    onChange={(e) => setProgram(e.target.value)}
+                    placeholder="e.g., OFAC"
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
