@@ -16,7 +16,7 @@ interface Match {
   nationalities: string[];
   date_listed: string;
   aliases: string[];
-  best_score: number;
+  combined_score: number;
   remarks?: string;
   date_of_birth_text?: string;
   // PEP fields
@@ -367,7 +367,7 @@ export default function ScreeningPage() {
                         </div>
                         <div className="text-right ml-4">
                           <div className="text-3xl font-bold text-blue-600">
-                            {(match.best_score * 100).toFixed(1)}%
+                            {(match.combined_score * 100).toFixed(1)}%
                           </div>
                           <p className="text-xs text-gray-600">Confidence</p>
                         </div>
@@ -418,7 +418,7 @@ export default function ScreeningPage() {
                         </div>
                         <div>
                           <p className="text-gray-600 mb-1">📊 Match Score</p>
-                          <p className="font-semibold">{(match.best_score * 100).toFixed(1)}%</p>
+                          <p className="font-semibold">{(match.combined_score * 100).toFixed(1)}%</p>
                         </div>
                       </div>
 
