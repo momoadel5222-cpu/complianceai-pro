@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Search, AlertCircle, CheckCircle, XCircle, Download, Clock, History, Crown, Shield, Award } from 'lucide-react';
+import { Search, AlertCircle, CheckCircle, XCircle, Download, Clock, History, Crown, Shield, Award, FileSpreadsheet, FileText, FileDown } from 'lucide-react';
 import { useAuth } from './AuthContext';
+import { exportToExcel, exportToCSV, exportToPDF } from './exportUtils';
 
 const API_BASE_URL = window.location.hostname === 'localhost' 
   ? 'http://localhost:3000/api' 
@@ -19,22 +20,32 @@ interface Match {
   combined_score: number;
   remarks?: string;
   date_of_birth_text?: string;
-  // PEP fields
   is_pep?: boolean;
   pep_level?: 'direct' | 'associate' | 'family';
   position?: string;
   jurisdiction?: string;
   risk_score?: number;
+  risk_assessment?: {
+    level: string;
+    score: number;
+  };
 }
 
 interface SearchResult {
   screening_id: string;
+  case_id: string;
   status: 'match' | 'potential_match' | 'no_match';
   matches: Match[];
+  timestamp: string;
+  user?: {
+    email?: string;
+    user_id?: string;
+  };
 }
 
 interface HistoryItem {
   id: string;
+  case_id: string;
   search_term: string;
   search_type: string;
   status: string;
@@ -42,6 +53,87 @@ interface HistoryItem {
   highest_match_score: number;
   created_at: string;
 }
+
+// Export Menu Component
+const ExportMenu = ({ result, entityName, entityType }: { result: SearchResult; entityName: string; entityType: string }) => {
+  const [showMenu, setShowMenu] = useState(false);
+  
+  const exportData = {
+    case_id: result.case_id || result.screening_id || 'N/A',
+    search_term: entityName,
+    entity_type: entityType,
+    status: result.status,
+    match_count: result.matches.length,
+    matches: result.matches,
+    timestamp: result.timestamp || new Date().toISOString(),
+    user_email: result.user?.email
+  };
+  
+  const handleExport = async (type: 'excel' | 'csv' | 'pdf') => {
+    setShowMenu(false);
+    
+    try {
+      switch (type) {
+        case 'excel':
+          exportToExcel(exportData);
+          break;
+        case 'csv':
+          exportToCSV(exportData);
+          break;
+        case 'pdf':
+          await exportToPDF(exportData);
+          break;
+      }
+    } catch (error) {
+      console.error('Export error:', error);
+      alert('Export failed. Please try again.');
+    }
+  };
+  
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setShowMenu(!showMenu)}
+        className="flex items-center gap-2 px-4 py-2 bg-white rounded-lg hover:bg-gray-50 transition border border-gray-300 shadow-sm"
+      >
+        <Download className="w-4 h-4" />
+        Export
+      </button>
+      
+      {showMenu && (
+        <>
+          <div 
+            className="fixed inset-0 z-10" 
+            onClick={() => setShowMenu(false)}
+          />
+          <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-gray-200 py-2 z-20">
+            <button
+              onClick={() => handleExport('pdf')}
+              className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center gap-3 transition"
+            >
+              <FileText className="w-4 h-4 text-red-600" />
+              <span className="text-sm font-medium">Export as PDF</span>
+            </button>
+            <button
+              onClick={() => handleExport('excel')}
+              className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center gap-3 transition"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-green-600" />
+              <span className="text-sm font-medium">Export as Excel</span>
+            </button>
+            <button
+              onClick={() => handleExport('csv')}
+              className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center gap-3 transition"
+            >
+              <FileDown className="w-4 h-4 text-blue-600" />
+              <span className="text-sm font-medium">Export as CSV</span>
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
 
 export default function ScreeningPage() {
   const { session } = useAuth();
@@ -95,6 +187,7 @@ export default function ScreeningPage() {
         {
           name: entityName,
           type: entityType,
+          filter: searchFilter
         },
         { headers }
       );
@@ -170,7 +263,6 @@ export default function ScreeningPage() {
   };
 
   const getRiskBadge = (riskScore?: number, isPep?: boolean, listSource?: string) => {
-    // Calculate risk if not provided
     let score = riskScore || 0;
     if (!riskScore) {
       if (listSource?.includes('OFAC') || listSource?.includes('UN')) score += 80;
@@ -331,14 +423,11 @@ export default function ScreeningPage() {
                     <h3 className="text-xl font-bold capitalize">{result.status.replace('_', ' ')}</h3>
                     <p className="text-sm opacity-75">
                       {result.matches.length} match{result.matches.length !== 1 ? 'es' : ''} found
-                      {result.matches.length > 0 && ' - Review required'}
+                      {result.case_id && <span className="ml-2">• Case ID: <span className="font-mono font-semibold">{result.case_id}</span></span>}
                     </p>
                   </div>
                 </div>
-                <button className="flex items-center gap-2 px-4 py-2 bg-white rounded-lg hover:bg-gray-50 transition">
-                  <Download className="w-4 h-4" />
-                  Export
-                </button>
+                <ExportMenu result={result} entityName={entityName} entityType={entityType} />
               </div>
 
               {result.matches.length > 0 && (
@@ -373,7 +462,6 @@ export default function ScreeningPage() {
                         </div>
                       </div>
 
-                      {/* PEP Specific Info */}
                       {match.is_pep && (
                         <div className="mb-4 p-4 bg-purple-50 rounded-lg border border-purple-200">
                           <h6 className="font-semibold text-purple-900 mb-2 flex items-center gap-2">
@@ -466,11 +554,23 @@ export default function ScreeningPage() {
                 </span>
               </div>
               <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-700">UK OFSI</span>
+                <span className="text-xs font-semibold text-green-600 bg-green-50 px-2 py-1 rounded">
+                  Active
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-700">UAE Terrorist</span>
+                <span className="text-xs font-semibold text-green-600 bg-green-50 px-2 py-1 rounded">
+                  Active
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-700 flex items-center gap-1">
                   <Crown className="w-3 h-3" />
                   PEP Database
                 </span>
-<span className="text-xs font-semibold text-green-600 bg-green-50 px-2 py-1 rounded">
+                <span className="text-xs font-semibold text-green-600 bg-green-50 px-2 py-1 rounded">
                   Active
                 </span>
               </div>
@@ -500,8 +600,9 @@ export default function ScreeningPage() {
                         <p className="text-sm font-semibold text-gray-700 truncate">
                           {item.search_term}
                         </p>
-                        <p className="text-xs text-gray-500">
-                          {formatDate(item.created_at)}
+                        <p className="text-xs text-gray-500 flex items-center gap-2">
+                          {item.case_id && <span className="font-mono">{item.case_id}</span>}
+                          <span>• {formatDate(item.created_at)}</span>
                         </p>
                       </div>
                       <span className={`text-xs font-semibold px-2 py-1 rounded ml-2 ${
