@@ -95,7 +95,10 @@ function ScreeningPage() {
       const data = await response.json();
       
       if (data.success) {
-        setResults(data.data);
+        setResults({
+          ...data.data,
+          matches: data.data.matches || []
+        });
         setSearchHistory(prev => [data.data, ...prev.slice(0, 9)]);
       } else {
         setError(data.error || 'Search failed');
