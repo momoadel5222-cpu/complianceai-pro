@@ -23,9 +23,8 @@ GROQ_API_KEY = os.environ.get('GROQ_API_KEY')
 groq_client = None
 if GROQ_API_KEY:
     try:
-        groq_client = OpenAI(
-            api_key=GROQ_API_KEY,
-            base_url="https://api.groq.com/openai/v1"
+        groq_client = Groq(
+            api_key=GROQ_API_KEY
         )
         logger.info("✅ Groq AI initialized")
     except Exception as e:
