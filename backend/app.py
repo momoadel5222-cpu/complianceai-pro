@@ -4,9 +4,7 @@ from supabase import create_client, Client
 import os
 import logging
 from datetime import datetime
-import google.generativeai as genai
 from fuzzywuzzy import fuzz
-import numpy as np
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -16,90 +14,58 @@ CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 SUPABASE_URL = os.environ.get('SUPABASE_URL', 'https://qwacsyreyuhhlvzcwhnw.supabase.co')
 SUPABASE_KEY = os.environ.get('SUPABASE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF3YWNzeXJleXVoaGx2emN3aG53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxNDIyNzgsImV4cCI6MjA3ODcxODI3OH0.dv17Wt-3YvG-JoExolq9jXsqVMWEyDHRu074LokO7es')
-GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY') or os.environ.get('OPENAI_API_KEY')
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+# Only import Gemini if key is available
 if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-    logger.info("✅ Gemini API key configured")
+    try:
+        import google.generativeai as genai
+        genai.configure(api_key=GEMINI_API_KEY)
+        logger.info("✅ AI API key configured")
+    except ImportError:
+        logger.warning("google-generativeai not installed")
+        GEMINI_API_KEY = None
 else:
-    logger.warning("⚠️ Gemini API key not found - AI features disabled")
+    logger.warning("⚠️ AI API key not found - AI features disabled")
 
 def calculate_fuzzy_score(str1, str2):
     if not str1 or not str2: return 0.0
     str1, str2 = str1.lower().strip(), str2.lower().strip()
     if str1 == str2: return 1.0
     if str1 in str2 or str2 in str1: return 0.9
-    return round((fuzz.ratio(str1, str2) * 0.2 + fuzz.partial_ratio(str1, str2) * 0.2 + 
-                  fuzz.token_sort_ratio(str1, str2) * 0.3 + fuzz.token_set_ratio(str1, str2) * 0.3) / 100.0, 3)
+    ratio = fuzz.ratio(str1, str2) / 100.0
+    partial = fuzz.partial_ratio(str1, str2) / 100.0
+    token_sort = fuzz.token_sort_ratio(str1, str2) / 100.0
+    token_set = fuzz.token_set_ratio(str1, str2) / 100.0
+    return round((ratio * 0.2 + partial * 0.2 + token_sort * 0.3 + token_set * 0.3), 3)
 
-def explain_match_with_gemini(query_name, matched_entity):
-    if not GEMINI_API_KEY: return "AI explanation unavailable"
+def explain_match_with_ai(query_name, matched_entity):
+    if not GEMINI_API_KEY: return None
     try:
-        # Try gemini-1.0-pro first, then fallback to gemini-pro
-        try:
-            model = genai.GenerativeModel('gemini-1.0-pro')
-        except:
-            model = genai.GenerativeModel('gemini-pro')
-        
-        prompt = f"""Analyze this sanctions match for compliance screening:
-
-QUERY: {query_name}
-MATCHED ENTITY: {matched_entity.get('entity_name')}
-ALIASES: {', '.join(matched_entity.get('aliases', [])[:3])}
-NATIONALITIES: {', '.join(matched_entity.get('nationalities', []))}
-SANCTIONS PROGRAM: {matched_entity.get('program', 'N/A')}
-SOURCE LIST: {matched_entity.get('list_source', 'N/A')}
-MATCH SCORE: {matched_entity.get('combined_score', 0)}
-
-Provide a concise 2-3 sentence analysis explaining:
-1. Why this match occurred (name similarity, aliases, etc.)
-2. Key compliance risks and confidence level
-3. Recommended next steps for due diligence"""
-
-        response = model.generate_content(
-            prompt,
-            generation_config=genai.types.GenerationConfig(
-                temperature=0.3,
-                max_output_tokens=200
-            )
-        )
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        prompt = f"Why does '{query_name}' match '{matched_entity.get('entity_name')}' on {matched_entity.get('list_source')} list? Risk level? (2 sentences max)"
+        response = model.generate_content(prompt)
         return response.text.strip()
     except Exception as e:
-        logger.error(f"Gemini explanation error: {e}")
-        # Return a helpful fallback explanation
-        return f"AI Analysis: This match with '{matched_entity.get('entity_name')}' has a similarity score of {matched_entity.get('combined_score', 0)}. The entity is listed under '{matched_entity.get('program', 'N/A')}' program. Consider reviewing aliases and verifying against official sources."
+        logger.error(f"AI error: {e}")
+        return None
 
-def calculate_risk_score(entity, match_score, semantic_score=None):
+def calculate_risk_score(entity, match_score):
     risk_score = match_score * 40
     risk_factors = []
-    
-    high_risk = ['terrorism', 'proliferation', 'narcotics', 'isis', 'al-qaeda', 'taliban']
-    program = entity.get('program', '').lower()
-    if any(k in program for k in high_risk):
-        risk_score += 20
+    program = (entity.get('program') or '').lower()
+    if any(k in program for k in ['terrorism', 'proliferation', 'narcotics', 'isis', 'taliban']): 
+        risk_score += 30
         risk_factors.append(f"High-risk program: {entity.get('program')}")
-    elif program:
-        risk_score += 10
-        risk_factors.append(f"Listed program: {entity.get('program')}")
+    elif program: 
+        risk_score += 15
+        risk_factors.append(f"Sanctioned program: {entity.get('program')}")
     
-    if any(s in entity.get('list_source', '').lower() for s in ['ofac', 'un', 'eu', 'uk']):
-        risk_score += 10
+    source = (entity.get('list_source') or '').lower()
+    if any(s in source for s in ['ofac', 'un', 'eu']): 
+        risk_score += 20
         risk_factors.append(f"Trusted source: {entity.get('list_source')}")
-    
-    date_listed = entity.get('date_listed')
-    if date_listed:
-        try:
-            if isinstance(date_listed, str):
-                listed = datetime.fromisoformat(date_listed.replace('Z', '+00:00'))
-                days = (datetime.now(listed.tzinfo or None) - listed).days
-                if days < 365:
-                    risk_score += 10
-                    risk_factors.append("Recently listed")
-                elif days < 1825:
-                    risk_score += 5
-        except:
-            pass
     
     risk_score = min(100, risk_score)
     level = "CRITICAL" if risk_score >= 80 else "HIGH" if risk_score >= 60 else "MEDIUM" if risk_score >= 40 else "LOW"
@@ -108,20 +74,18 @@ def calculate_risk_score(entity, match_score, semantic_score=None):
 @app.route('/api/health', methods=['GET'])
 def health():
     return jsonify({
-        "status": "ok",
-        "message": "Backend is running",
-        "ai_features": "enabled" if GEMINI_API_KEY else "disabled",
-        "ai_provider": "Gemini",
-        "version": "2.0-Gemini-Fixed"
+        "status": "ok", 
+        "message": "Backend is running", 
+        "ai_features": "enabled" if GEMINI_API_KEY else "disabled", 
+        "version": "2.1-Fast"
     }), 200
 
 @app.route('/', methods=['GET'])
 def root():
     return jsonify({
-        "message": "ComplianceAI Backend API",
-        "status": "running",
-        "version": "2.0-Gemini-Fixed",
-        "ai_provider": "Google Gemini"
+        "message": "ComplianceAI Backend API", 
+        "status": "running", 
+        "version": "2.1-Fast"
     }), 200
 
 @app.route('/api/sanctions/screen', methods=['POST', 'OPTIONS'])
@@ -131,33 +95,32 @@ def sanctions_screen():
     
     try:
         data = request.get_json()
-        logger.info(f"Screening request: {data}")
-        
         name = data.get('name', '').strip()
         entity_type = data.get('type', 'individual')
-        use_ai = data.get('use_ai', True)
+        use_ai = data.get('use_ai', False)  # 🚀 DEFAULT FALSE FOR SPEED
         nationality_filter = data.get('nationality', '').strip()
         
         if not name:
             return jsonify({"success": False, "error": "Name required"}), 400
         
-        # Query database
+        logger.info(f"Screening: {name} (type={entity_type}, ai={use_ai})")
+        
+        # Fast database query
         try:
             query = supabase.table('sanctions_list').select('*')
             if entity_type != 'all':
                 query = query.eq('entity_type', entity_type)
             query = query.or_(f'entity_name.ilike.%{name}%,aliases.cs.{{"{name}"}}')
-            response = query.limit(300).execute()
+            response = query.limit(100).execute()  # 🚀 Reduced from 300
             all_matches = response.data if response.data else []
-            logger.info(f"Found {len(all_matches)} database matches")
+            logger.info(f"Found {len(all_matches)} matches")
         except Exception as e:
-            logger.error(f"Database error: {str(e)}")
+            logger.error(f"DB error: {str(e)}")
             return jsonify({"success": False, "error": str(e)}), 500
         
-        # Process matches
+        # Fast fuzzy matching
         matches = []
         for entity in all_matches:
-            # Apply nationality filter
             if nationality_filter:
                 nats = entity.get('nationalities', []) or []
                 if not any(nationality_filter.lower() in (n or '').lower() for n in nats):
@@ -165,42 +128,40 @@ def sanctions_screen():
             
             entity_name = entity.get('entity_name', '')
             name_score = calculate_fuzzy_score(name, entity_name)
-            alias_scores = [calculate_fuzzy_score(name, str(a)) for a in (entity.get('aliases', []) or []) if a]
+            
+            # Check aliases (limit to first 5 for speed)
+            alias_scores = []
+            for alias in (entity.get('aliases', []) or [])[:5]:
+                if alias:
+                    alias_scores.append(calculate_fuzzy_score(name, str(alias)))
+            
             best_fuzzy = max([name_score] + alias_scores) if alias_scores else name_score
             
-            # Combined score
-            combined = best_fuzzy
-            
-            if combined > 0.5:
-                risk = calculate_risk_score(entity, combined)
+            if best_fuzzy > 0.5:
+                risk = calculate_risk_score(entity, best_fuzzy)
                 matches.append({
                     **entity,
                     'match_score': round(name_score, 3),
                     'best_fuzzy_score': round(best_fuzzy, 3),
-                    'semantic_score': None,
-                    'combined_score': round(combined, 3),
+                    'combined_score': round(best_fuzzy, 3),
                     'risk_assessment': risk,
                     'ai_explanation': None
                 })
         
-        # Sort by combined score
+        # Sort by score
         matches.sort(key=lambda x: x.get('combined_score', 0), reverse=True)
-        
-        # Generate AI explanations for top matches
-        if use_ai and GEMINI_API_KEY and matches:
-            for i, m in enumerate(matches[:3]):
-                logger.info(f"Generating Gemini explanation for match {i+1}")
-                m['ai_explanation'] = explain_match_with_gemini(name, m)
-        
         matches = matches[:20]
+        
+        # 🚀 Only generate AI explanation for TOP match if AI enabled
+        if use_ai and GEMINI_API_KEY and matches:
+            logger.info("Generating AI explanation for top match...")
+            matches[0]['ai_explanation'] = explain_match_with_ai(name, matches[0])
         
         # Determine status
         status = 'no_match'
         if matches:
             top = matches[0]['combined_score']
             status = 'match' if top > 0.85 else 'potential_match' if top > 0.65 else 'low_confidence_match'
-        
-        logger.info(f"Returning {len(matches)} matches, status: {status}")
         
         return jsonify({
             "success": True,
@@ -211,15 +172,14 @@ def sanctions_screen():
                 "query": {
                     "name": name,
                     "type": entity_type,
-                    "ai_enabled": use_ai and GEMINI_API_KEY is not None,
-                    "ai_provider": "Gemini" if GEMINI_API_KEY else None
+                    "ai_enabled": use_ai and GEMINI_API_KEY is not None
                 },
                 "timestamp": datetime.now().isoformat()
             }
         }), 200
-    
+        
     except Exception as e:
-        logger.error(f"Screening error: {str(e)}", exc_info=True)
+        logger.error(f"Error: {str(e)}", exc_info=True)
         return jsonify({"success": False, "error": str(e)}), 500
 
 if __name__ == "__main__":
