@@ -4,9 +4,7 @@ import { Search, AlertCircle, CheckCircle, XCircle, Download, Clock, History, Cr
 import { useAuth } from './AuthContext';
 import { exportToExcel, exportToCSV, exportToPDF } from './exportUtils';
 
-const API_BASE_URL = window.location.hostname === 'localhost' 
-  ? 'http://localhost:3000/api' 
-  : 'https://complianceai-backend-7n50.onrender.com/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 interface Match {
   id: string;
@@ -156,7 +154,7 @@ export default function ScreeningPage() {
     if (!session?.access_token) return;
     
     try {
-      const response = await axios.get(`${API_BASE_URL}/sanctions/history`, {
+      const response = await axios.get(`${API_BASE_URL}/api/history`, {
         headers: {
           Authorization: `Bearer ${session.access_token}`
         }
