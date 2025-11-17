@@ -53,3 +53,6 @@ data/*.json
 *.backup.tsx
 *.old.tsx
 *.backup.*
+cleaned_sanctions.csv
+backend/sanctions_data/*.csv
+*.csv
