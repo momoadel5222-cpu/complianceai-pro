@@ -105,9 +105,13 @@ async def root():
 @app.get("/api/health")
 async def health_check():
     try:
-        result = execute_query(
-            "SELECT COUNT(*) as count FROM sanctions_list",
-            fetch_one=True
+@app.get("/health")
+async def health_check():
+    return {"status": "alive", "service": "ComplianceAI API"}
+
+# Keep your detailed health check under a different path
+@app.get("/api/health")
+async def detailed_health_check():
         )
         
         if result and result['count'] is not None:
