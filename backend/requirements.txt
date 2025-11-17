@@ -1,26 +1,6 @@
-# Web framework
-fastapi==0.110.0
-uvicorn[standard]==0.29.0
-
-# Database
-psycopg2-binary==2.9.9
-
-# Core utilities
-pydantic==2.6.4
-pydantic-settings==2.2.1
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
 python-dotenv==1.0.0
+psycopg2-binary==2.9.9
+pydantic==2.5.0
 requests==2.31.0
-
-# Async support
-asyncpg==0.29.0
-
-# Security
-passlib==1.7.4
-python-jose==3.3.0
-cryptography==42.0.5
-
-# CORS
-
-# Logging
-structlog==24.1.0
-gunicorn

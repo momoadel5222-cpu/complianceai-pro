@@ -190,8 +190,8 @@ export default function ScreeningPage() {
         { headers }
       );
 
-      if (response.data.success) {
-        let filteredMatches = response.data.data.matches;
+      if (response.data.matches) {
+        let filteredMatches = response.data.matches;
         
         // Apply filter
         if (searchFilter === 'sanctions') {
