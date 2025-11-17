@@ -154,7 +154,7 @@ export default function ScreeningPage() {
     if (!session?.access_token) return;
     
     try {
-      const response = await axios.get(`${API_BASE_URL}/api/history`, {
+      const response = await axios.get(`${API_BASE_URL}/history`, {
         headers: {
           Authorization: `Bearer ${session.access_token}`
         }
@@ -181,7 +181,7 @@ export default function ScreeningPage() {
       } : {};
 
       const response = await axios.post(
-        `${API_BASE_URL}/api/screen`,
+        `${API_BASE_URL}/screen`,
         {
           name: entityName,
           type: entityType,
