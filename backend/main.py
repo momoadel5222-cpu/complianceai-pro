@@ -208,6 +208,36 @@ async def get_statistics():
         print(f"Stats error: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get statistics: {str(e)}")
 
+# Screening history endpoint
+@app.get("/api/history")
+async def get_screening_history():
+    """Get recent screening history from sanctions list"""
+    try:
+        query = """
+            SELECT 
+                id::text as id,
+                entity_name,
+                entity_type,
+                list_source,
+                is_pep,
+                pep_level,
+                position,
+                jurisdiction,
+                created_at::text as created_at
+            FROM sanctions_list
+            ORDER BY created_at DESC
+            LIMIT 50
+        """
+        results = execute_query(query)
+        return {
+            "data": results if results else [],
+            "total": len(results) if results else 0,
+            "timestamp": datetime.utcnow().isoformat() + "Z"
+        }
+    except Exception as e:
+        print(f"History error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get history: {str(e)}")
+
 # Startup/shutdown
 @app.on_event("startup")
 async def startup_event():
