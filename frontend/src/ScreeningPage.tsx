@@ -181,7 +181,7 @@ export default function ScreeningPage() {
       } : {};
 
       const response = await axios.post(
-        `${API_BASE_URL}/api/screen`,
+        `${API_BASE_URL}/api/sanctions/screen`,
         {
           name: entityName,
           type: entityType,
