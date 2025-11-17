@@ -20,7 +20,6 @@ python-jose==3.3.0
 cryptography==42.0.5
 
 # CORS
-fastapi-cors==0.5.1
 
 # Logging
 structlog==24.1.0
