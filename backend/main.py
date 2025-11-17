@@ -1,12 +1,22 @@
+import os
+from dotenv import load_dotenv
+
+# Load .env in development (ignored in Render if not present)
+load_dotenv()
+
+# ✅ CORRECT: Read from environment variable named "COCKROACH_URL"
+DATABASE_URL = os.getenv("COCKROACH_URL")
+
+if not DATABASE_URL:
+    raise RuntimeError("❌ Missing COCKROACH_URL environment variable")
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
-import os
-
-# Import database functions
-from config import execute_query
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
 app = FastAPI(
     title="ComplianceAI Pro API",
@@ -22,6 +32,29 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Database function (replacing your config.execute_query)
+def execute_query(query: str, params: tuple = (), fetch_one: bool = False):
+    """Execute a query and return results"""
+    conn = None
+    try:
+        conn = psycopg2.connect(DATABASE_URL)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute(query, params)
+        
+        if fetch_one:
+            result = cursor.fetchone()
+        else:
+            result = cursor.fetchall()
+            
+        return result
+        
+    except Exception as e:
+        print(f"Database error: {e}")
+        raise
+    finally:
+        if conn:
+            conn.close()
 
 # Request/Response Models
 class ScreenRequest(BaseModel):
@@ -73,7 +106,7 @@ async def root():
 async def health_check():
     try:
         result = execute_query(
-            "SELECT COUNT(*) as count FROM sanctions_list LIMIT 1",
+            "SELECT COUNT(*) as count FROM sanctions_list",
             fetch_one=True
         )
         
