@@ -34,21 +34,19 @@ const handleScreen = async () => {
   setLoading(true);
   setError(null);
   setResult(null);
-
-  // Map 'both' to a valid backend type
-  const type = entityType === 'both' ? 'individual' : entityType;
-
+  
   try {
-    // Map 'both' to 'individual' as fallback
-    const type = entityType === 'both' ? 'individual' : entityType;
-    
-    // Call with correct parameters
-    const response = await screenEntity(entityName, type);
+    // This is the key fix - only send the name, not country or date_of_birth
+    const response = await screenEntity({
+      name: entityName
+    });
     setResult(response);
   } catch (err: any) {
-    setError(err.message || 'Screening failed');
+    setError(err.message || 'Connection error');
   } finally {
     setLoading(false);
+  }
+};
   }
 };
 
