@@ -440,3 +440,66 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     logger.info(f"🚀 Starting server on port {port}")
     app.run(host="0.0.0.0", port=port, debug=False)
+
+# ============= AUTHENTICATION ENDPOINTS =============
+
+@app.route('/api/register', methods=['POST', 'OPTIONS'])
+def register():
+    if request.method == 'OPTIONS':
+        return '', 204
+    try:
+        data = request.json
+        email = data.get('email')
+        password = data.get('password')
+        full_name = data.get('full_name', '')
+        if not email or not password:
+            return jsonify({'success': False, 'error': 'Email and password required'}), 400
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({'success': True, 'user': {'id': 'demo', 'email': email, 'full_name': full_name, 'role': 'user'}, 'message': 'Demo registration'}), 201
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM public.profiles WHERE email = %s", (email,))
+        if cursor.fetchone():
+            cursor.close()
+            conn.close()
+            return jsonify({'success': False, 'error': 'Email already registered'}), 400
+        cursor.execute("INSERT INTO public.profiles (email, full_name, role) VALUES (%s, %s, 'user') RETURNING id, email, full_name, role", (email, full_name))
+        user = cursor.fetchone()
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return jsonify({'success': True, 'user': dict(user), 'message': 'Registration successful'}), 201
+    except Exception as e:
+        logger.error(f"Registration error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/login', methods=['POST', 'OPTIONS'])
+def login():
+    if request.method == 'OPTIONS':
+        return '', 204
+    try:
+        data = request.json
+        email = data.get('email')
+        password = data.get('password')
+        if not email or not password:
+            return jsonify({'success': False, 'error': 'Email and password required'}), 400
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({'success': True, 'user': {'id': 'demo-user', 'email': email, 'full_name': 'Demo User', 'role': 'user'}, 'message': 'Demo login'}), 200
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, email, full_name, role, company FROM public.profiles WHERE email = %s", (email,))
+        user = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        if not user:
+            return jsonify({'success': False, 'error': 'Invalid credentials'}), 401
+        return jsonify({'success': True, 'user': dict(user), 'message': 'Login successful'}), 200
+    except Exception as e:
+        logger.error(f"Login error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/logout', methods=['POST', 'OPTIONS'])
+def logout():
+    if request.method == 'OPTIONS':
+        return '', 204
+    return jsonify({'success': True, 'message': 'Logout successful'}), 200
