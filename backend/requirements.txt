@@ -10,3 +10,4 @@ psycopg2-binary==2.9.9
 fuzzywuzzy==0.18.0
 jellyfish==1.0.3
 rapidfuzz==3.6.1
+python-Levenshtein
