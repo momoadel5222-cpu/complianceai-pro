@@ -1,5 +1,4 @@
-// Use .env.local for API URL, fallback to production backend
-export const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://complianceai-backend-7n50.onrender.com';
+export const API_BASE_URL = 'https://complianceai-backend-7n50.onrender.com';
 
 interface ScreenRequest {
   name: string;
@@ -47,7 +46,8 @@ export interface EnhancedSearchResult {
 }
 
 export const screenEntity = async (data: ScreenRequest): Promise<EnhancedSearchResult> => {
-  const response = await fetch(`${API_BASE_URL}/api/screen`, {
+  const url = API_BASE_URL + '/api/screen';
+  const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -61,12 +61,14 @@ export const screenEntity = async (data: ScreenRequest): Promise<EnhancedSearchR
 };
 
 export const getStats = async () => {
-  const response = await fetch(`${API_BASE_URL}/api/stats`);
+  const url = API_BASE_URL + '/api/stats';
+  const response = await fetch(url);
   if (!response.ok) throw new Error('Stats fetch failed');
   return response.json();
 };
 
 export const getHealth = async () => {
-  const response = await fetch(`${API_BASE_URL}/api/health`);
+  const url = API_BASE_URL + '/api/health';
+  const response = await fetch(url);
   return response.json();
 };
