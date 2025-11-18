@@ -54,16 +54,3 @@ export const screenEntity = async (data: ScreenRequest): Promise<EnhancedSearchR
     const errorData = await response.json();
     throw new Error(errorData.error || 'Screening failed');
 };
-
-export const getStats = async () => {
-  const url = API_BASE_URL + '/api/stats';
-  const response = await fetch(url);
-  if (!response.ok) throw new Error('Stats fetch failed');
-  return response.json();
-};
-
-export const getHealth = async () => {
-  const url = API_BASE_URL + '/api/health';
-  const response = await fetch(url);
-  return response.json();
-};

@@ -34,15 +34,12 @@ const handleScreen = async () => {
   setError(null);
   setResult(null);
   
-try {
-  const response = await screenEntity(entityName.trim());
-  setResult(response);
-} catch (err: any) {
-  setError(err.message || 'Screening failed');
-};
+  try {
+    // This is the CORRECT call - only send the name
+    const response = await screenEntity(entityName.trim());
     setResult(response);
   } catch (err: any) {
-    setError(err.message || 'Connection error');
+    setError(err.message || 'Screening failed');
   } finally {
     setLoading(false);
   }
