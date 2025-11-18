@@ -1,4 +1,3 @@
-cat > src/ScreeningPage.tsx << 'EOF'
 import { useState, useEffect } from 'react';
 import { Search, AlertCircle, CheckCircle, XCircle, Download, Brain, TrendingUp, AlertTriangle, LogOut, Shield, User, Building, Users, Crown } from 'lucide-react';
 import { screenEntity, getStats, EnhancedSearchResult, EnhancedMatch } from './lib/api';
