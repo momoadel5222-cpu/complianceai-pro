@@ -20,21 +20,12 @@ CORS(app, resources={r"/api/*": {"origins": ["http://localhost:5173", "https://c
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
-# Check if DATABASE_URL is set
 if not DATABASE_URL:
     logger.error("❌ DATABASE_URL not set in environment variables!")
-    # We'll continue but with a fallback mode
-    db_available = False
-else:
-    logger.info(f"✅ DATABASE_URL found: {DATABASE_URL[:20]}...")
-    db_available = True
+    raise Exception("DATABASE_URL environment variable is required")
 
 def get_db_connection():
     """Get database connection with proper error handling"""
-    if not db_available:
-        logger.warning("Database not available - running in demo mode")
-        return None
-        
     try:
         conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
         return conn
@@ -175,93 +166,6 @@ def search_database_flexible(name: str, entity_type: str, conn) -> List[Dict]:
     unique_results = {item['id']: item for item in all_results}.values()
     return list(unique_results)
 
-def get_demo_data(name: str, entity_type: str) -> List[Dict]:
-    """Provide demo data when database is not available"""
-    logger.info("Using demo data - database not available")
-    
-    # Demo data for testing
-    demo_individuals = [
-        {
-            'id': 1,
-            'entity_name': 'Mostafa Madbouly',
-            'entity_type': 'individual',
-            'list_source': 'PEP',
-            'program': 'Egypt Prime Minister',
-            'nationalities': ['EGYPTIAN'],
-            'aliases': ['Mostafa Kamal Madbouly', 'مصطفى مدبولي'],
-            'date_of_birth': '1966-04-28',
-            'place_of_birth': 'Cairo, Egypt',
-            'jurisdiction': 'Egypt',
-            'remarks': 'Current Prime Minister of Egypt',
-            'is_pep': True
-        },
-        {
-            'id': 2,
-            'entity_name': 'Ahmed Zewail',
-            'entity_type': 'individual',
-            'list_source': 'PEP',
-            'program': 'Egyptian Scientist',
-            'nationalities': ['EGYPTIAN', 'AMERICAN'],
-            'aliases': ['Ahmed Hassan Zewail'],
-            'date_of_birth': '1946-02-26',
-            'place_of_birth': 'Damanhur, Egypt',
-            'jurisdiction': 'Egypt, USA',
-            'remarks': 'Nobel Prize winner in Chemistry',
-            'is_pep': False
-        },
-        {
-            'id': 3,
-            'entity_name': 'Vladimir Putin',
-            'entity_type': 'individual',
-            'list_source': 'PEP',
-            'program': 'Russian President',
-            'nationalities': ['RUSSIAN'],
-            'aliases': ['Vladimir Vladimirovich Putin', 'Владимир Путин'],
-            'date_of_birth': '1952-10-07',
-            'place_of_birth': 'Leningrad, Soviet Union',
-            'jurisdiction': 'Russia',
-            'remarks': 'Current President of Russia',
-            'is_pep': True
-        }
-    ]
-    
-    demo_entities = [
-        {
-            'id': 101,
-            'entity_name': 'Egyptian Armed Forces',
-            'entity_type': 'entity',
-            'list_source': 'OFAC',
-            'program': 'Military Sanctions',
-            'nationalities': [],
-            'aliases': ['EAF', 'Egyptian Military'],
-            'date_of_birth': None,
-            'place_of_birth': None,
-            'jurisdiction': 'Egypt',
-            'remarks': 'State military organization',
-            'is_pep': False
-        }
-    ]
-    
-    # Filter based on entity type
-    if entity_type == 'individual':
-        demo_data = demo_individuals
-    else:
-        demo_data = demo_entities
-    
-    # Simple name matching for demo
-    results = []
-    name_lower = name.lower()
-    for item in demo_data:
-        if name_lower in item['entity_name'].lower():
-            results.append(item)
-        else:
-            for alias in item.get('aliases', []):
-                if name_lower in alias.lower():
-                    results.append(item)
-                    break
-    
-    return results
-
 @app.route('/api/health', methods=['GET'])
 def health():
     conn = get_db_connection()
@@ -273,8 +177,7 @@ def health():
         "status": "ok",
         "message": "Backend is running",
         "ai_enabled": groq_client is not None,
-        "database": db_status,
-        "demo_mode": not db_available
+        "database": db_status
     }), 200
 
 @app.route('/', methods=['GET'])
@@ -300,25 +203,16 @@ def sanctions_screen():
 
         logger.info(f"🔍 Screening: {name} (type={entity_type})")
 
-        # Try to connect to database
         conn = get_db_connection()
-        
         if not conn:
-            # Use demo data if database is not available
-            logger.warning("Using demo data - database not available")
-            all_matches = get_demo_data(name, entity_type)
-            is_demo_mode = True
-        else:
-            try:
-                all_matches = search_database_flexible(name, entity_type, conn)
-                logger.info(f"📊 Found {len(all_matches)} potential matches")
-                is_demo_mode = False
-            except Exception as e:
-                logger.error(f"DB error: {str(e)}")
-                # Fallback to demo data
-                logger.warning("Falling back to demo data due to DB error")
-                all_matches = get_demo_data(name, entity_type)
-                is_demo_mode = True
+            return jsonify({"success": False, "error": "Database connection failed"}), 500
+
+        try:
+            all_matches = search_database_flexible(name, entity_type, conn)
+            logger.info(f"📊 Found {len(all_matches)} potential matches")
+        except Exception as e:
+            logger.error(f"DB error: {str(e)}")
+            return jsonify({"success": False, "error": str(e)}), 500
 
         matches = []
         for entity in all_matches:
@@ -425,8 +319,7 @@ def sanctions_screen():
                 for m in matches[:10]
             ],
             "risk_level": matches[0]['risk_assessment']['level'] if matches else "Low",
-            "timestamp": datetime.now().isoformat(),
-            "demo_mode": is_demo_mode
+            "timestamp": datetime.now().isoformat()
         }), 200
 
     except Exception as e:

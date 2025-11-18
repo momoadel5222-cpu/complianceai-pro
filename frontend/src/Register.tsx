@@ -8,6 +8,7 @@ export default function Register() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [fullName, setFullName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { signUp } = useAuth();
@@ -28,11 +29,19 @@ export default function Register() {
     setLoading(true);
 
     try {
-      await signUp(email, password);
-      navigate('/');
+      const { data, error: signUpError } = await signUp(email, password, fullName);
+      
+      if (signUpError) {
+        setError(signUpError.message || 'Failed to create account');
+        setLoading(false);
+        return;
+      }
+
+      if (data?.user) {
+        navigate('/');
+      }
     } catch (err: any) {
-      setError(err.message || 'Failed to create account');
-    } finally {
+      setError(err.message || 'An unexpected error occurred');
       setLoading(false);
     }
   };
@@ -56,6 +65,20 @@ export default function Register() {
             )}
 
             <form onSubmit={handleSubmit} className="space-y-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Full Name
+                </label>
+                <input
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  required
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="John Doe"
+                />
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Email

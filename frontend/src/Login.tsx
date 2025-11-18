@@ -18,11 +18,19 @@ export default function Login() {
     setLoading(true);
 
     try {
-      await signIn(email, password);
-      navigate('/');
+      const { data, error: signInError } = await signIn(email, password);
+      
+      if (signInError) {
+        setError(signInError.message || 'Failed to sign in');
+        setLoading(false);
+        return;
+      }
+
+      if (data?.user) {
+        navigate('/');
+      }
     } catch (err: any) {
-      setError(err.message || 'Failed to sign in');
-    } finally {
+      setError(err.message || 'An unexpected error occurred');
       setLoading(false);
     }
   };

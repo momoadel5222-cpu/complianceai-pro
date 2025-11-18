@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ComplianceAI Pro</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; padding: 20px; background: #f8f9fa; }
+    .container { max-width: 1200px; margin: 0 auto; }
+    .header { text-align: center; color: #1a365d; margin-bottom: 40px; }
+    .search-box { display: flex; gap: 10px; margin-bottom: 30px; }
+    input { flex: 1; padding: 15px; font-size: 16px; border: 2px solid #e2e8f0; border-radius: 8px; }
+    button { padding: 15px 30px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+    button:hover { transform: translateY(-2px); }
+    button:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+    .match-card { background: white; border-radius: 12px; padding: 25px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-left: 5px solid #48bb78; }
+    .match-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .confidence { padding: 8px 16px; border-radius: 25px; font-weight: bold; color: white; }
+    .high { background: #48bb78; }
+    .medium { background: #ed8936; }
+    .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin-bottom: 15px; }
+    .info-item { background: #f7fafc; padding: 12px; border-radius: 8px; }
+    .details { background: #ebf8ff; padding: 15px; border-radius: 8px; font-size: 14px; border-left: 4px solid #4299e1; }
+    .loading { text-align: center; padding: 40px; font-size: 18px; color: #666; }
+    .no-results { text-align: center; padding: 40px; color: #666; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+</html>
