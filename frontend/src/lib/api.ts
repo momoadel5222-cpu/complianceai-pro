@@ -1,8 +1,9 @@
-// Use .env.local for API URL, fallback to local backend
-export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://0.0.0.0:10000';
+// Use .env.local for API URL, fallback to production backend
+export const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://complianceai-backend-7n50.onrender.com';
 
 interface ScreenRequest {
   name: string;
+  type?: string;
   country?: string;
   date_of_birth?: string;
 }
@@ -38,7 +39,7 @@ export interface EnhancedSearchResult {
   total_matches: number;
   matches: EnhancedMatch[];
   ai_analysis: string | null;
-  ai_explanation?: AISummary; // New field for structured AI
+  ai_explanation?: AISummary;
   risk_level: string;
   recommended_action: string;
   entity_name?: string;
@@ -49,8 +50,12 @@ export const screenEntity = async (data: ScreenRequest): Promise<EnhancedSearchR
   const response = await fetch(`${API_BASE_URL}/api/screen`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
+    body: JSON.stringify({
+      name: data.name,
+      type: 'individual'
+    }),
   });
+  
   if (!response.ok) throw new Error('Screening failed');
   return response.json();
 };
