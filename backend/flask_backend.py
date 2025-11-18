@@ -436,10 +436,6 @@ def sanctions_screen():
         if conn:
             conn.close()
 
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    logger.info(f"🚀 Starting server on port {port}")
-    app.run(host="0.0.0.0", port=port, debug=False)
 
 # ============= AUTHENTICATION ENDPOINTS =============
 
@@ -503,3 +499,9 @@ def logout():
     if request.method == 'OPTIONS':
         return '', 204
     return jsonify({'success': True, 'message': 'Logout successful'}), 200
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    logger.info(f"🚀 Starting server on port {port}")
+    app.run(host="0.0.0.0", port=port, debug=False)
+
