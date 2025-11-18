@@ -9,3 +9,13 @@ groq==0.9.0
 psycopg2-binary==2.9.9
 fuzzywuzzy==0.18.0
 python-Levenshtein==0.25.0
+jellyfish==0.11.2
+flask==2.3.3
+flask-cors==4.0.0
+psycopg2-binary==2.9.7
+python-dotenv==1.0.0
+fuzzywuzzy==0.18.0
+python-Levenshtein==0.21.1
+groq==0.3.0
+jellyfish==1.0.3
+rapidfuzz==3.6.1

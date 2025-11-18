@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Search, AlertCircle, CheckCircle, XCircle, Download, Clock, History, Crown, Shield, Award, FileSpreadsheet, FileText, FileDown, Brain, TrendingUp, AlertTriangle, LogOut } from 'lucide-react';
+import { Search, AlertCircle, CheckCircle, XCircle, Download, Clock, History, Crown, Shield, Award, FileSpreadsheet, FileText, FileDown, Brain, TrendingUp, AlertTriangle, LogOut, Globe } from 'lucide-react';
 
-const API_BASE_URL = 'https://complianceai-backend-7n50.onrender.com/api';  // FIXED: Correct API endpoint
+const API_BASE_URL = 'https://complianceai-backend-7n50.onrender.com';
 
 interface Match {
   entity_name: string;
@@ -11,6 +11,9 @@ interface Match {
   nationalities: string[];
   date_of_birth: string;
   match_score: number;
+  ai_analysis?: string;
+  phonetic_matches?: string[];
+  risk_explanation?: string;
 }
 
 interface SearchResult {
@@ -21,13 +24,15 @@ interface SearchResult {
   total_matches: number;
   recommended_action: string;
   ai_analysis?: string;
+  phonetic_suggestions?: string[];
 }
 
 export default function ScreeningPage() {
-  const [entityName, setEntityName] = useState('Mostafa Madbouly');  // PRELOAD
+  const [entityName, setEntityName] = useState('Mostafa Madbouly');
   const [country, setCountry] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [entityType, setEntityType] = useState<'individual' | 'entity' | 'both'>('individual');
+  const [searchLanguage, setSearchLanguage] = useState<'english' | 'arabic'>('english');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<SearchResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -40,72 +45,76 @@ export default function ScreeningPage() {
   const fetchStats = async () => {
     // Mock stats for demo
     setStats({
-      total_sanctions: 1250000,
       status: 'LIVE'
     });
   };
 
-const handleScreen = async () => {
-  if (!entityName.trim()) {
-    setError('Please enter a name to search');
-    return;
-  }
-
-  setLoading(true);
-  setError(null);
-  setResult(null);
-  
-  try {
-    const response = await fetch(`https://complianceai-backend-7n50.onrender.com/api/screen`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        name: entityName,  // ✅ CORRECT: Use "name" not "entity_name"
-        type: entityType,
-        nationality: country || '',  // ✅ CORRECT: Backend expects "nationality"
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Screening failed: ${response.status}`);
+  const handleScreen = async () => {
+    if (!entityName.trim()) {
+      setError('Please enter a name to search');
+      return;
     }
 
-    const data = await response.json();
-    console.log('✅ Backend response:', data);
+    setLoading(true);
+    setError(null);
+    setResult(null);
     
-    // Transform the ACTUAL backend response structure
-    const transformedResult: SearchResult = {
-      name: data.name,
-      match_found: data.match_found,
-      matches: data.matches.map((match: any) => ({
-        entity_name: match.name,  // ✅ Use match.name from backend
-        entity_type: match.is_pep ? 'individual PEP' : 'sanctions',
-        list_source: match.list_type,  // ✅ Use list_type from backend
-        program: match.program,
-        nationalities: [match.nationalities],  // ✅ Backend returns string, convert to array
-        date_of_birth: match.date_of_birth,
-        match_score: match.confidence  // ✅ Use confidence from backend
-      })),
-      total_matches: data.matches.length,
-      risk_level: data.risk_level,
-      recommended_action: data.matches.length > 0 ? 'REVIEW' : 'APPROVE',
-      ai_analysis: data.matches.length > 0 
-        ? `Found ${data.matches.length} match${data.matches.length !== 1 ? 'es' : ''} with risk level: ${data.risk_level}`
-        : 'No matches found across all watchlists.'
-    };
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/screen`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: entityName,
+          type: entityType,
+          nationality: country || '',
+          language: searchLanguage,
+          enhanced_ai: true,
+          phonetic_search: true
+        }),
+      });
 
-    setResult(transformedResult);
-  } catch (err: any) {
-    setError(err.message || 'Screening failed - check backend connection');
-    console.error('❌ Screening error:', err);
-  } finally {
-    setLoading(false);
-  }
-};
+      if (!response.ok) {
+        throw new Error('Screening failed');
+      }
 
-  // YOUR EXACT ORIGINAL FUNCTIONS - 100% UNCHANGED
+      const data = await response.json();
+      
+      // Transform backend response
+      const transformedResult: SearchResult = {
+        name: data.name,
+        match_found: data.match_found,
+        matches: data.matches.map((match: any) => ({
+          entity_name: match.name || match.entity_name,
+          entity_type: match.is_pep ? 'individual PEP' : 'sanctions',
+          list_source: match.list_type || match.list_source,
+          program: match.program,
+          nationalities: typeof match.nationalities === 'string' 
+            ? match.nationalities.split(', ') 
+            : match.nationalities || [],
+          date_of_birth: match.date_of_birth || 'Not specified',
+          match_score: match.confidence || match.match_score || 0,
+          ai_analysis: match.ai_analysis,
+          phonetic_matches: match.phonetic_matches,
+          risk_explanation: match.risk_explanation
+        })),
+        total_matches: data.matches.length,
+        risk_level: data.risk_level || 'LOW',
+        recommended_action: data.matches.length > 0 ? 'REVIEW' : 'APPROVE',
+        ai_analysis: data.ai_analysis,
+        phonetic_suggestions: data.phonetic_suggestions
+      };
+
+      setResult(transformedResult);
+    } catch (err: any) {
+      setError(err.message || 'Screening failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Risk color and icon functions remain the same...
   const getRiskColor = (level: string) => {
     switch (level.toUpperCase()) {
       case 'HIGH': case 'CRITICAL': return 'bg-red-50 border-red-300 text-red-900';
@@ -157,7 +166,7 @@ const handleScreen = async () => {
               <h1 className="text-2xl font-bold text-slate-900">
                 ComplianceAI Pro
               </h1>
-              <p className="text-xs text-blue-700 font-semibold">Enterprise Sanctions Intelligence</p>
+              <p className="text-xs text-blue-700 font-semibold">Enhanced Due Diligence & Sanctions Intelligence</p>
             </div>
           </div>
           <button
@@ -172,7 +181,7 @@ const handleScreen = async () => {
 
       <div className="max-w-7xl mx-auto p-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main Search Section - YOUR EXACT CODE */}
+          {/* Main Search Section */}
           <div className="lg:col-span-2 space-y-6">
             <div className="bg-white rounded-xl shadow-xl border border-slate-200 p-8">
               <div className="flex items-center gap-3 mb-6">
@@ -180,8 +189,8 @@ const handleScreen = async () => {
                   <Search className="w-6 h-6 text-slate-700" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-bold text-slate-900">Sanctions Screening</h2>
-                  <p className="text-sm text-slate-600">Global watchlist and sanctions list monitoring</p>
+                  <h2 className="text-2xl font-bold text-slate-900">Enhanced Due Diligence & Sanctions Screening</h2>
+                  <p className="text-sm text-slate-600">AI-powered global watchlist monitoring with bilingual support</p>
                 </div>
               </div>
 
@@ -206,8 +215,39 @@ const handleScreen = async () => {
                     onChange={(e) => setEntityName(e.target.value)}
                     onKeyPress={(e) => e.key === 'Enter' && handleScreen()}
                     className="w-full px-4 py-3.5 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition shadow-sm"
-                    placeholder="Enter individual or organization name..."
+                    placeholder="Enter individual or organization name in English or Arabic..."
                   />
+                </div>
+
+                {/* Language Selection */}
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">
+                    Search Language
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={() => setSearchLanguage('english')}
+                      className={`px-4 py-3.5 border-2 rounded-xl font-semibold transition-all shadow-sm flex items-center justify-center gap-2 ${
+                        searchLanguage === 'english'
+                          ? 'border-blue-600 bg-gradient-to-br from-blue-600 to-blue-700 text-white shadow-lg shadow-blue-200'
+                          : 'border-slate-300 text-slate-700 hover:border-blue-400 bg-white hover:bg-blue-50'
+                      }`}
+                    >
+                      <Globe className="w-4 h-4" />
+                      English
+                    </button>
+                    <button
+                      onClick={() => setSearchLanguage('arabic')}
+                      className={`px-4 py-3.5 border-2 rounded-xl font-semibold transition-all shadow-sm flex items-center justify-center gap-2 ${
+                        searchLanguage === 'arabic'
+                          ? 'border-green-600 bg-gradient-to-br from-green-600 to-green-700 text-white shadow-lg shadow-green-200'
+                          : 'border-slate-300 text-slate-700 hover:border-green-400 bg-white hover:bg-green-50'
+                      }`}
+                    >
+                      <Globe className="w-4 h-4" />
+                      العربية
+                    </button>
+                  </div>
                 </div>
 
                 <div>
@@ -282,12 +322,12 @@ const handleScreen = async () => {
                   {loading ? (
                     <>
                       <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                      Screening in Progress...
+                      AI Screening in Progress...
                     </>
                   ) : (
                     <>
-                      <Shield className="w-5 h-5" />
-                      Screen Entity
+                      <Brain className="w-5 h-5" />
+                      Enhanced AI Screening
                     </>
                   )}
                 </button>
@@ -321,10 +361,10 @@ const handleScreen = async () => {
                       <Brain className="w-6 h-6 text-slate-700 flex-shrink-0 mt-1" />
                       <div className="flex-1">
                         <h4 className="font-bold text-lg text-slate-900 mb-1">
-                          Compliance Risk Analysis
+                          AI Risk Intelligence Analysis
                         </h4>
                         <p className="text-sm text-slate-600 font-semibold uppercase tracking-wide">
-                          Automated Intelligence Assessment
+                          Groq AI Enhanced Assessment
                         </p>
                       </div>
                     </div>
@@ -332,6 +372,32 @@ const handleScreen = async () => {
                       <p className="text-sm leading-relaxed text-slate-800 bg-slate-50 p-4 rounded border border-slate-200 font-medium">
                         {result.ai_analysis}
                       </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Phonetic Suggestions */}
+                {result.phonetic_suggestions && result.phonetic_suggestions.length > 0 && (
+                  <div className="mb-6 p-6 bg-blue-50 rounded-lg border-2 border-blue-200">
+                    <div className="flex items-start gap-3 mb-3">
+                      <TrendingUp className="w-6 h-6 text-blue-600 flex-shrink-0 mt-1" />
+                      <div className="flex-1">
+                        <h4 className="font-bold text-lg text-slate-900 mb-1">
+                          Phonetic Match Suggestions
+                        </h4>
+                        <p className="text-sm text-blue-600 font-semibold uppercase tracking-wide">
+                          AI-Enhanced Name Variations
+                        </p>
+                      </div>
+                    </div>
+                    <div className="pl-9">
+                      <div className="flex flex-wrap gap-2">
+                        {result.phonetic_suggestions.map((suggestion, idx) => (
+                          <span key={idx} className="px-3 py-1 bg-white rounded-full border border-blue-300 text-sm font-medium text-blue-700">
+                            {suggestion}
+                          </span>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -354,7 +420,7 @@ const handleScreen = async () => {
                   <div className="space-y-4">
                     <h4 className="font-bold text-base flex items-center gap-2 text-slate-900 uppercase tracking-wide">
                       <TrendingUp className="w-5 h-5" />
-                      Match Details
+                      Enhanced Match Details
                     </h4>
                     {result.matches.map((match, idx) => (
                       <div key={idx} className="bg-white/95 backdrop-blur rounded-lg p-6 shadow-sm border-2 border-slate-200">
@@ -380,9 +446,54 @@ const handleScreen = async () => {
                             <div className="text-3xl font-bold text-slate-900">
                               {(match.match_score * 100).toFixed(0)}%
                             </div>
-                            <p className="text-xs text-slate-600 font-bold uppercase tracking-wide">Match Score</p>
+                            <p className="text-xs text-slate-600 font-bold uppercase tracking-wide">AI Match Score</p>
                           </div>
                         </div>
+
+                        {/* AI Analysis for this match */}
+                        {match.ai_analysis && (
+                          <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                            <div className="flex items-start gap-2">
+                              <Brain className="w-4 h-4 text-blue-600 flex-shrink-0 mt-1" />
+                              <div>
+                                <p className="text-sm font-semibold text-blue-800 mb-1">AI Analysis:</p>
+                                <p className="text-sm text-blue-700">{match.ai_analysis}</p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Risk Explanation */}
+                        {match.risk_explanation && (
+                          <div className="mb-4 p-4 bg-red-50 rounded-lg border border-red-200">
+                            <div className="flex items-start gap-2">
+                              <AlertTriangle className="w-4 h-4 text-red-600 flex-shrink-0 mt-1" />
+                              <div>
+                                <p className="text-sm font-semibold text-red-800 mb-1">Risk Factors:</p>
+                                <p className="text-sm text-red-700">{match.risk_explanation}</p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Phonetic Matches */}
+                        {match.phonetic_matches && match.phonetic_matches.length > 0 && (
+                          <div className="mb-4 p-4 bg-green-50 rounded-lg border border-green-200">
+                            <div className="flex items-start gap-2">
+                              <TrendingUp className="w-4 h-4 text-green-600 flex-shrink-0 mt-1" />
+                              <div>
+                                <p className="text-sm font-semibold text-green-800 mb-1">Phonetic Variations Found:</p>
+                                <div className="flex flex-wrap gap-1">
+                                  {match.phonetic_matches.map((phonetic, pIdx) => (
+                                    <span key={pIdx} className="px-2 py-1 bg-white rounded text-xs font-medium text-green-700 border border-green-300">
+                                      {phonetic}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
 
                         <div className="grid grid-cols-2 gap-4 text-sm pt-4 border-t-2 border-slate-200">
                           <div>
@@ -423,7 +534,7 @@ const handleScreen = async () => {
                 </h3>
                 <div className="text-center mb-4 p-6 bg-gradient-to-br from-blue-600 to-blue-800 rounded-xl shadow-lg">
                   <div className="text-4xl font-bold text-white mb-1">
-                    {stats.total_sanctions?.toLocaleString()}
+                    Global
                   </div>
                   <p className="text-xs text-blue-100 font-semibold uppercase tracking-wide">Records Monitored</p>
                 </div>
@@ -438,72 +549,43 @@ const handleScreen = async () => {
               </div>
             )}
 
-            {/* Coverage Panel */}
-            <div className="bg-white rounded-xl shadow-xl border border-slate-200 p-6">
-              <h3 className="font-bold text-base mb-4 flex items-center gap-2 text-slate-900">
-                <Shield className="w-5 h-5 text-blue-600" />
-                Live Sanctions Feed
-              </h3>
-              <div className="space-y-3">
-                {[
-                  { name: 'UN Security Council', status: 'live' },
-                  { name: 'OFAC Sanctions List', status: 'live' },
-                  { name: 'UK-HMT Sanctions', status: 'live' },
-                  { name: 'Domestic Lists', status: 'live' }
-                ].map((source) => (
-                  <div key={source.name} className="flex justify-between items-center p-3.5 bg-slate-50 rounded-xl border border-slate-200 hover:shadow-md transition-shadow">
-                    <div className="flex items-center gap-3">
-                      <div className="relative">
-                        <div className="w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse shadow-lg shadow-red-300"></div>
-                        <div className="absolute inset-0 w-2.5 h-2.5 bg-red-500 rounded-full animate-ping"></div>
-                      </div>
-                      <span className="text-sm font-semibold text-slate-700">{source.name}</span>
-                    </div>
-                    <span className="text-xs font-bold text-green-700 bg-green-100 px-3 py-1 rounded-full uppercase tracking-wide">
-                      LIVE
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
             {/* AI Features */}
             <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl shadow-xl border-2 border-blue-200 p-6">
               <h3 className="font-bold text-base mb-4 flex items-center gap-2 text-slate-900">
                 <Brain className="w-5 h-5 text-blue-600" />
-                Compliance Intelligence Features
+                AI Intelligence Features
               </h3>
               <div className="space-y-3 text-sm">
                 <div className="flex items-start gap-3 p-3.5 bg-white rounded-xl border border-blue-100 shadow-sm">
-                  <Shield className="w-6 h-6 text-slate-700 flex-shrink-0 mt-1" />
+                  <Brain className="w-6 h-6 text-slate-700 flex-shrink-0 mt-1" />
                   <div className="flex-1">
                     <p className="font-bold text-lg text-slate-900 mb-1">
-                      Risk Assessment
+                      Groq AI Analysis
                     </p>
                     <p className="text-slate-600 font-semibold uppercase tracking-wide">
-                      Automated compliance risk scoring
+                      Real-time risk intelligence
                     </p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3 p-3.5 bg-white rounded-xl border border-purple-100 shadow-sm">
-                  <TrendingUp className="w-6 h-6 text-purple-600 flex-shrink-0 mt-1" />
+                  <Globe className="w-6 h-6 text-purple-600 flex-shrink-0 mt-1" />
                   <div className="flex-1">
                     <p className="font-bold text-lg text-slate-900 mb-1">
-                      Match Analysis
+                      Bilingual Search
                     </p>
                     <p className="text-slate-600 font-semibold uppercase tracking-wide">
-                      Intelligent entity verification
+                      Arabic & English screening
                     </p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3 p-3.5 bg-white rounded-xl border border-blue-100 shadow-sm">
-                  <AlertTriangle className="w-6 h-6 text-blue-600 flex-shrink-0 mt-1" />
+                  <TrendingUp className="w-6 h-6 text-blue-600 flex-shrink-0 mt-1" />
                   <div className="flex-1">
                     <p className="font-bold text-lg text-slate-900 mb-1">
-                      Action Recommendations
+                      Phonetic Matching
                     </p>
                     <p className="text-slate-600 font-semibold uppercase tracking-wide">
-                      Decision support guidance
+                      Advanced name variations
                     </p>
                   </div>
                 </div>
@@ -512,29 +594,6 @@ const handleScreen = async () => {
           </div>
         </div>
       </div>
-
-      {/* Footer */}
-      <footer className="mt-12 bg-gradient-to-r from-blue-600 to-blue-800 shadow-2xl py-8">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-white/10 rounded-lg backdrop-blur">
-                <Shield className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <p className="text-sm font-bold text-white">ComplianceAI Pro</p>
-                <p className="text-xs text-blue-100">Professional Sanctions Screening Platform</p>
-              </div>
-            </div>
-            <div className="text-right">
-              <p className="text-sm text-white font-semibold">
-                Powered by <span className="font-bold">Mohamed Emam</span>
-              </p>
-              <p className="text-xs text-blue-100 mt-1">Compliance AI © 2024</p>
-            </div>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }
