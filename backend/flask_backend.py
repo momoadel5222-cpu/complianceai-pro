@@ -281,6 +281,40 @@ def health():
 def root():
     return jsonify({"message": "ComplianceAI Backend API", "status": "running"}), 200
 
+
+@app.route('/api/stats', methods=['GET'])
+def get_stats():
+    """Get database statistics"""
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({
+                'status': 'demo',
+                'total_sanctions': 46597,
+                'message': 'Running in demo mode'
+            }), 200
+        
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) as total FROM sanctions")
+        result = cursor.fetchone()
+        total = result['total'] if result else 46597
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            'status': 'active',
+            'total_sanctions': total
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Stats error: {e}")
+        return jsonify({
+            'status': 'error',
+            'total_sanctions': 46597,
+            'error': str(e)
+        }), 500
+
 @app.route('/api/screen', methods=['POST', 'OPTIONS'])
 @app.route('/api/sanctions/screen', methods=['POST', 'OPTIONS'])
 def sanctions_screen():
