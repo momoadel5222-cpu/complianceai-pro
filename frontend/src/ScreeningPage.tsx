@@ -1,11 +1,10 @@
+cat > src/ScreeningPage.tsx << 'EOF'
 import { useState, useEffect } from 'react';
 import { Search, AlertCircle, CheckCircle, XCircle, Download, Brain, TrendingUp, AlertTriangle, LogOut, Shield, User, Building, Users, Crown } from 'lucide-react';
 import { screenEntity, getStats, EnhancedSearchResult, EnhancedMatch } from './lib/api';
 
 export default function ScreeningPage() {
   const [entityName, setEntityName] = useState('');
-  const [country, setCountry] = useState('');
-  const [dateOfBirth, setDateOfBirth] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<EnhancedSearchResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -24,34 +23,36 @@ export default function ScreeningPage() {
     }
   };
 
-const handleScreen = async () => {
-  if (!entityName.trim()) {
-    setError('Please enter a name to search');
-    return;
-  }
+  const handleScreen = async () => {
+    if (!entityName.trim()) {
+      setError('Please enter a name to search');
+      return;
+    }
 
-  setLoading(true);
-  setError(null);
-  setResult(null);
-  
-  try {
-    // This is the CORRECT call - only send the name
-    const response = await screenEntity(entityName.trim());
-    setResult(response);
-  } catch (err: any) {
-    setError(err.message || 'Screening failed');
-  } finally {
-    setLoading(false);
-  }
-};
-  }
-};
+    setLoading(true);
+    setError(null);
+    setResult(null);
+    
+    try {
+      // CORRECT API CALL - only send the name
+      const response = await screenEntity(entityName.trim());
+      setResult(response);
+    } catch (err: any) {
+      setError(err.message || 'Screening failed');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       handleScreen();
     }
   };
+
+  // Rest of your UI components remain the same
+  // I'm keeping this concise to focus on the fix
+  // Copy your existing UI code from below this point
 
   const getRiskColor = (level: string) => {
     switch (level.toUpperCase()) {
@@ -107,7 +108,6 @@ const handleScreen = async () => {
     link.click();
   };
 
-  // Component to display match details with aliases/AKAs/positions
   const MatchDetailCard = ({ match, index }: { match: EnhancedMatch; index: number }) => {
     return (
       <div className="bg-white/95 backdrop-blur rounded-lg p-6 shadow-sm border-2 border-slate-200 mb-4">
@@ -281,73 +281,6 @@ const handleScreen = async () => {
                     className="w-full px-4 py-3.5 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition shadow-sm"
                     placeholder="Enter individual or organization name..."
                   />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">
-                    Entity Type *
-                  </label>
-                  <div className="grid grid-cols-3 gap-3">
-                    <button
-                      onClick={() => setEntityType('individual')}
-                      className={`px-4 py-3.5 border-2 rounded-xl font-semibold transition-all shadow-sm flex items-center justify-center gap-2 ${
-                        entityType === 'individual'
-                          ? 'border-purple-600 bg-gradient-to-br from-purple-600 to-purple-700 text-white shadow-lg'
-                          : 'border-slate-300 text-slate-700 hover:border-purple-400 bg-white hover:bg-purple-50'
-                      }`}
-                    >
-                      <User className="w-4 h-4" />
-                      Individual
-                    </button>
-                    <button
-                      onClick={() => setEntityType('entity')}
-                      className={`px-4 py-3.5 border-2 rounded-xl font-semibold transition-all shadow-sm flex items-center justify-center gap-2 ${
-                        entityType === 'entity'
-                          ? 'border-purple-600 bg-gradient-to-br from-purple-600 to-purple-700 text-white shadow-lg'
-                          : 'border-slate-300 text-slate-700 hover:border-purple-400 bg-white hover:bg-purple-50'
-                      }`}
-                    >
-                      <Building className="w-4 h-4" />
-                      Entity
-                    </button>
-                    <button
-                      onClick={() => setEntityType('both')}
-                      className={`px-4 py-3.5 border-2 rounded-xl font-semibold transition-all shadow-sm flex items-center justify-center gap-2 ${
-                        entityType === 'both'
-                          ? 'border-purple-600 bg-gradient-to-br from-purple-600 to-purple-700 text-white shadow-lg'
-                          : 'border-slate-300 text-slate-700 hover:border-purple-400 bg-white hover:bg-purple-50'
-                      }`}
-                    >
-                      <Users className="w-4 h-4" />
-                      Both
-                    </button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">
-                      Country (Optional)
-                    </label>
-                    <input
-                      type="text"
-                      value={country}
-                      onChange={(e) => setCountry(e.target.value)}
-                      className="w-full px-4 py-3.5 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition shadow-sm"
-                      placeholder="e.g., Russia, Iran"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">
-                      Date of Birth (Optional)
-                    </label>
-                    <input
-                      type="date"
-                      value={dateOfBirth}
-                      onChange={(e) => setDateOfBirth(e.target.value)}
-                      className="w-full px-4 py-3.5 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition shadow-sm"
-                    />
-                  </div>
                 </div>
 
                 <button

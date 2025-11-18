@@ -10,39 +10,21 @@ interface AISummary {
   key_factors: string[];
 }
 
-export interface EnhancedMatch {
-  entity_name: string;
-  entity_type: string;
-  list_source: string;
-  program: string;
-  nationalities: string[];
-  date_of_birth: string;
-  match_score: number;
-  aliases?: string[];
-  akas?: string[];
-  positions?: string[];
-  countries?: string[];
-  dates?: string[];
-  details?: Record<string, any>;
-}
-
 export interface EnhancedSearchResult {
   query: {
     name: string;
-    };
+  };
   total_matches: number;
   matches: EnhancedMatch[];
   ai_analysis: string | null;
   ai_explanation?: AISummary;
   risk_level: string;
   recommended_action: string;
-  entity_name?: string;
   screening_timestamp?: string;
 }
 
-export const screenEntity = async (data: ScreenRequest): Promise<EnhancedSearchResult> => {
-  const url = API_BASE_URL + '/api/screen';
-  const response = await fetch(url, {
+export const screenEntity = async (name: string): Promise<EnhancedSearchResult> => {
+  const response = await fetch(API_BASE_URL + '/api/screen', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -53,4 +35,17 @@ export const screenEntity = async (data: ScreenRequest): Promise<EnhancedSearchR
   if (!response.ok) {
     const errorData = await response.json();
     throw new Error(errorData.error || 'Screening failed');
+  }
+  return response.json();
+};
+
+export const getStats = async () => {
+  const response = await fetch(API_BASE_URL + '/api/stats');
+  if (!response.ok) throw new Error('Stats fetch failed');
+  return response.json();
+};
+
+export const getHealth = async () => {
+  const response = await fetch(API_BASE_URL + '/api/health');
+  return response.json();
 };
