@@ -45,17 +45,16 @@ export interface EnhancedSearchResult {
   screening_timestamp?: string;
 }
 
-export const screenEntity = async (data: ScreenRequest): Promise<EnhancedSearchResult> => {
+export const screenEntity = async (entityName: string, type: string, data: ScreenRequest): Promise<EnhancedSearchResult> => {
   const url = API_BASE_URL + '/api/screen';
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       name: data.name,
-      type: 'individual'
+      type: 'individual'  // This is crucial - must match backend expectations
     }),
   });
-  
   if (!response.ok) throw new Error('Screening failed');
   return response.json();
 };

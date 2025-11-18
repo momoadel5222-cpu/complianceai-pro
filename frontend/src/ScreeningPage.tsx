@@ -25,29 +25,32 @@ export default function ScreeningPage() {
     }
   };
 
-  const handleScreen = async () => {
-    if (!entityName.trim()) {
-      setError('Please enter a name to search');
-      return;
-    }
+const handleScreen = async () => {
+  if (!entityName.trim()) {
+    setError('Please enter a name to search');
+    return;
+  }
 
-    setLoading(true);
-    setError(null);
-    setResult(null);
+  setLoading(true);
+  setError(null);
+  setResult(null);
+
+  // Map 'both' to a valid backend type
+  const type = entityType === 'both' ? 'individual' : entityType;
+
+  try {
+    // Map 'both' to 'individual' as fallback
+    const type = entityType === 'both' ? 'individual' : entityType;
     
-    try {
-      const response = await screenEntity({
-        name: entityName,
-        country: country || undefined,
-        date_of_birth: dateOfBirth || undefined
-      });
-      setResult(response);
-    } catch (err: any) {
-      setError(err.message || 'Connection error');
-    } finally {
-      setLoading(false);
-    }
-  };
+    // Call with correct parameters
+    const response = await screenEntity(entityName, type);
+    setResult(response);
+  } catch (err: any) {
+    setError(err.message || 'Screening failed');
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
