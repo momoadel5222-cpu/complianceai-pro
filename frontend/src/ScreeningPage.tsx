@@ -6,7 +6,6 @@ export default function ScreeningPage() {
   const [entityName, setEntityName] = useState('');
   const [country, setCountry] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
-  const [entityType, setEntityType] = useState<'individual' | 'entity' | 'both'>('both');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<EnhancedSearchResult | null>(null);
   const [error, setError] = useState<string | null>(null);

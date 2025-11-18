@@ -29,9 +29,7 @@ export interface EnhancedMatch {
 export interface EnhancedSearchResult {
   query: {
     name: string;
-    country: string;
-    date_of_birth: string;
-  };
+    };
   total_matches: number;
   matches: EnhancedMatch[];
   ai_analysis: string | null;
@@ -48,12 +46,13 @@ export const screenEntity = async (data: ScreenRequest): Promise<EnhancedSearchR
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      name: data.name,
+      name: name,
       type: 'individual'
     }),
   });
-  if (!response.ok) throw new Error('Screening failed');
-  return response.json();
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || 'Screening failed');
 };
 
 export const getStats = async () => {
