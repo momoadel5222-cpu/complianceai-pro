@@ -16,7 +16,17 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "*"}})
+CORS(app, resources={
+    r"/api/*": {
+        "origins": [
+            "http://localhost:5173", 
+            "https://complianceai-pro.vercel.app",
+            "https://complianceai-pro.vercel.app/"  # Your actual Vercel domain
+        ],
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
+    }
+})
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
@@ -31,15 +41,36 @@ else:
 
 def get_db_connection():
     """Get database connection with proper error handling"""
-    if not db_available:
-        logger.warning("Database not available - running in demo mode")
+    database_url = os.environ.get("DATABASE_URL")
+    
+    if not database_url:
+        logger.error("❌ DATABASE_URL environment variable is not set!")
         return None
-        
+    
+    # Fix common Supabase URL issues
+    if database_url.startswith('postgres://'):
+        database_url = database_url.replace('postgres://', 'postgresql://', 1)
+        logger.info("🔧 Fixed postgres:// to postgresql://")
+    
+    logger.info(f"🔗 Database URL: {database_url[:60]}...")
+    
     try:
-        conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+        conn = psycopg2.connect(database_url, cursor_factory=RealDictCursor)
+        
+        # Test the connection
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1 as test")
+        cursor.close()
+        
+        logger.info("✅ Database connection successful and tested")
         return conn
+        
+    except psycopg2.OperationalError as e:
+        logger.error(f"❌ Database operational error: {e}")
+        logger.error("💡 Check if your DATABASE_URL is correct and database is accessible")
+        return None
     except Exception as e:
-        logger.error(f"Database connection error: {e}")
+        logger.error(f"❌ Unexpected database error: {e}")
         return None
 
 GROQ_API_KEY = os.environ.get('GROQ_API_KEY')
@@ -281,6 +312,36 @@ def health():
 def root():
     return jsonify({"message": "ComplianceAI Backend API", "status": "running"}), 200
 
+# ============= DEBUG ENDPOINT =============
+@app.route('/api/debug', methods=['GET'])
+def debug_info():
+    """Debug endpoint to check environment and database"""
+    conn = get_db_connection()
+    
+    debug_info = {
+        "database_url_exists": bool(os.environ.get("DATABASE_URL")),
+        "database_url_length": len(os.environ.get("DATABASE_URL", "")),
+        "database_connected": bool(conn),
+        "groq_api_key_exists": bool(os.environ.get("GROQ_API_KEY")),
+        "environment_variables": [key for key in os.environ.keys() if 'DATABASE' in key or 'GROQ' in key or 'POSTGRES' in key]
+    }
+    
+    # Try to test database query if connected
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) as count FROM sanctions_list LIMIT 1")
+            result = cursor.fetchone()
+            debug_info["database_test_query"] = "success"
+            debug_info["sample_count"] = result['count'] if result else 0
+            cursor.close()
+            conn.close()
+        except Exception as e:
+            debug_info["database_test_query"] = f"failed: {str(e)}"
+            if conn:
+                conn.close()
+    
+    return jsonify(debug_info)
 
 @app.route('/api/stats', methods=['GET'])
 def get_stats():
@@ -316,21 +377,29 @@ def get_stats():
         }), 500
 
 @app.route('/api/screen', methods=['POST', 'OPTIONS'])
-@app.route('/api/sanctions/screen', methods=['POST', 'OPTIONS'])
 def sanctions_screen():
     if request.method == 'OPTIONS':
         return '', 204
 
     conn = None
     try:
+        # Add request validation
+        if not request.is_json:
+            return jsonify({"success": False, "error": "Request must be JSON"}), 400
+            
         data = request.get_json()
+        
+        # Validate required fields
+        if not data:
+            return jsonify({"success": False, "error": "No JSON data provided"}), 400
+            
         name = data.get('name', '').strip()
+        if not name:
+            return jsonify({"success": False, "error": "Name is required"}), 400
+
         entity_type = data.get('type', 'individual')
         use_ai = data.get('use_ai', True)
         nationality_filter = data.get('nationality', '').strip()
-
-        if not name:
-            return jsonify({"success": False, "error": "Name required"}), 400
 
         logger.info(f"🔍 Screening: {name} (type={entity_type})")
 
@@ -464,8 +533,8 @@ def sanctions_screen():
         }), 200
 
     except Exception as e:
-        logger.error(f"❌ Error: {str(e)}", exc_info=True)
-        return jsonify({"success": False, "error": str(e)}), 500
+        logger.error(f"❌ Screening error: {str(e)}", exc_info=True)
+        return jsonify({"success": False, "error": f"Internal server error: {str(e)}"}), 500
     finally:
         if conn:
             conn.close()
@@ -538,4 +607,3 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     logger.info(f"🚀 Starting server on port {port}")
     app.run(host="0.0.0.0", port=port, debug=False)
-
