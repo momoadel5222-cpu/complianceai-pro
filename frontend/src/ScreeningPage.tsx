@@ -37,10 +37,9 @@ const handleScreen = async () => {
 try {
   const response = await screenEntity(entityName.trim());
   setResult(response);
-} catch (err: any) 
-{
+} catch (err: any) {
   setError(err.message || 'Screening failed');
-    });
+};
     setResult(response);
   } catch (err: any) {
     setError(err.message || 'Connection error');
