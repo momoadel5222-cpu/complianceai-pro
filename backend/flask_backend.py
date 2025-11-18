@@ -16,7 +16,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": ["http://localhost:5173", "https://complianceai-pro.vercel.app", "https://shiny-spoon-96qrv99gxxvf74pq-5173.app.github.dev"]}})
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
