@@ -34,10 +34,12 @@ const handleScreen = async () => {
   setError(null);
   setResult(null);
   
-  try {
-    // This is the key fix - only send the name, not country or date_of_birth
-    const response = await screenEntity({
-      name: entityName
+try {
+  const response = await screenEntity(entityName.trim());
+  setResult(response);
+} catch (err: any) 
+{
+  setError(err.message || 'Screening failed');
     });
     setResult(response);
   } catch (err: any) {
