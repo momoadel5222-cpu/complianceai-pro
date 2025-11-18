@@ -1,9 +1,115 @@
 import { useState, useEffect } from 'react';
 import { Search, AlertCircle, CheckCircle, XCircle, Download, Brain, TrendingUp, AlertTriangle, LogOut, Shield, User, Building, Users, Crown } from 'lucide-react';
-import { screenEntity, getStats, EnhancedSearchResult, EnhancedMatch } from './lib/api';
+
+// API Configuration
+const API_BASE_URL = 'https://complianceai-backend-7n50.onrender.com';
+
+interface ScreenRequest {
+  name: string;
+  type?: 'individual' | 'entity' | 'both';
+  country?: string;
+  date_of_birth?: string;
+}
+
+interface EnhancedMatch {
+  entity_name: string;
+  entity_type: string;
+  list_source: string;
+  program: string;
+  match_score: number;
+  nationalities?: string[];
+  date_of_birth?: string;
+  aliases?: string[];
+  akas?: string[];
+  positions?: string[];
+  details?: Record<string, any>;
+}
+
+interface EnhancedSearchResult {
+  total_matches: number;
+  matches: EnhancedMatch[];
+  risk_level: string;
+  recommended_action: string;
+  ai_explanation?: {
+    summary: string;
+    risk_level: string;
+    key_factors: string[];
+  };
+  ai_analysis?: string;
+}
+
+// API Functions
+const screenEntity = async (data: ScreenRequest): Promise<EnhancedSearchResult> => {
+  const url = API_BASE_URL + '/api/screen';
+  
+  console.log('🔍 Sending request:', { name: data.name, type: data.type });
+  
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      name: data.name,
+      type: data.type || 'individual',
+      nationality: data.country, // Backend expects 'nationality', not 'country'
+      date_of_birth: data.date_of_birth
+    }),
+  });
+  
+  console.log('📡 Response status:', response.status);
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('❌ API Error:', errorText);
+    throw new Error(`Screening failed (${response.status}): ${errorText}`);
+  }
+  
+  const backendResult = await response.json();
+  console.log('✅ Backend response:', backendResult);
+  
+  // Transform backend response to match frontend expectations
+  const transformedResult: EnhancedSearchResult = {
+    total_matches: backendResult.matches?.length || 0,
+    matches: backendResult.matches || [],
+    risk_level: backendResult.risk_level || 'UNKNOWN',
+    recommended_action: backendResult.recommended_action || determineAction(backendResult.risk_level),
+    ai_explanation: backendResult.ai_summary ? {
+      summary: backendResult.ai_summary.summary || '',
+      risk_level: backendResult.ai_summary.risk_level || backendResult.risk_level?.toLowerCase() || 'unknown',
+      key_factors: backendResult.ai_summary.key_factors || []
+    } : undefined,
+    ai_analysis: backendResult.ai_analysis
+  };
+  
+  return transformedResult;
+};
+
+const determineAction = (riskLevel: string): string => {
+  switch (riskLevel?.toUpperCase()) {
+    case 'HIGH':
+    case 'CRITICAL':
+      return 'ESCALATE';
+    case 'MEDIUM':
+      return 'REVIEW';
+    case 'LOW':
+      return 'APPROVE';
+    default:
+      return 'CLEAR';
+  }
+};
+
+const getStats = async () => {
+  const response = await fetch(API_BASE_URL + '/api/health');
+  if (!response.ok) throw new Error('Failed to fetch stats');
+  return response.json();
+};
 
 export default function ScreeningPage() {
   const [entityName, setEntityName] = useState('');
+  const [country, setCountry] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState('');
+  const [entityType, setEntityType] = useState<'individual' | 'entity' | 'both'>('both');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<EnhancedSearchResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -33,11 +139,15 @@ export default function ScreeningPage() {
     setResult(null);
     
     try {
-      // CORRECT API CALL - only send the name
-      const response = await screenEntity(entityName.trim());
+      const response = await screenEntity({
+        name: entityName,
+        type: entityType,
+        country: country || undefined,
+        date_of_birth: dateOfBirth || undefined
+      });
       setResult(response);
     } catch (err: any) {
-      setError(err.message || 'Screening failed');
+      setError(err.message || 'Connection error');
     } finally {
       setLoading(false);
     }
@@ -49,12 +159,8 @@ export default function ScreeningPage() {
     }
   };
 
-  // Rest of your UI components remain the same
-  // I'm keeping this concise to focus on the fix
-  // Copy your existing UI code from below this point
-
   const getRiskColor = (level: string) => {
-    switch (level.toUpperCase()) {
+    switch (level?.toUpperCase()) {
       case 'HIGH': 
       case 'CRITICAL': 
         return 'bg-red-50 border-red-300 text-red-900';
@@ -68,7 +174,7 @@ export default function ScreeningPage() {
   };
 
   const getRiskIcon = (level: string) => {
-    switch (level.toUpperCase()) {
+    switch (level?.toUpperCase()) {
       case 'HIGH':
       case 'CRITICAL':
         return <AlertTriangle className="w-6 h-6 text-red-600" />;
@@ -82,7 +188,7 @@ export default function ScreeningPage() {
   };
 
   const getActionColor = (action: string) => {
-    switch (action.toUpperCase()) {
+    switch (action?.toUpperCase()) {
       case 'ESCALATE':
       case 'BLOCK':
         return 'bg-red-600 text-white';
@@ -136,7 +242,6 @@ export default function ScreeningPage() {
           </div>
         </div>
 
-        {/* Aliases Section */}
         {match.aliases && match.aliases.length > 0 && (
           <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
             <div className="flex items-center gap-2 mb-2">
@@ -153,7 +258,6 @@ export default function ScreeningPage() {
           </div>
         )}
 
-        {/* AKAs Section */}
         {match.akas && match.akas.length > 0 && (
           <div className="mb-4 p-4 bg-purple-50 rounded-lg border border-purple-200">
             <div className="flex items-center gap-2 mb-2">
@@ -170,7 +274,6 @@ export default function ScreeningPage() {
           </div>
         )}
 
-        {/* Positions Section (for PEPs) */}
         {match.positions && match.positions.length > 0 && (
           <div className="mb-4 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
             <div className="flex items-center gap-2 mb-2">
@@ -185,7 +288,6 @@ export default function ScreeningPage() {
           </div>
         )}
 
-        {/* Countries & Dates */}
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div>
             <p className="text-slate-500 mb-1 font-bold text-xs uppercase tracking-wide">Nationalities</p>
@@ -199,7 +301,6 @@ export default function ScreeningPage() {
           </div>
         </div>
 
-        {/* Additional Details */}
         {match.details && Object.keys(match.details).length > 0 && (
           <details className="mt-4 text-sm">
             <summary className="cursor-pointer text-blue-600 hover:text-blue-800 font-semibold">
@@ -216,7 +317,6 @@ export default function ScreeningPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50/30">
-      {/* Header */}
       <nav className="bg-white shadow-lg border-b border-blue-100">
         <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
           <div className="flex items-center gap-3">
@@ -230,7 +330,6 @@ export default function ScreeningPage() {
           </div>
           <button
             onClick={() => {
-              localStorage.removeItem('authToken');
               window.location.href = '/login';
             }}
             className="flex items-center gap-2 px-5 py-2.5 text-sm text-white bg-red-600 hover:bg-red-700 rounded-lg transition shadow-md font-semibold"
@@ -243,9 +342,7 @@ export default function ScreeningPage() {
 
       <div className="max-w-7xl mx-auto p-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main Search Section */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Search Card */}
             <div className="bg-white rounded-xl shadow-xl border border-slate-200 p-8">
               <div className="flex items-center gap-3 mb-6">
                 <div className="p-3 bg-gradient-to-br from-slate-100 to-slate-200 rounded-xl">
@@ -282,6 +379,73 @@ export default function ScreeningPage() {
                   />
                 </div>
 
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">
+                    Entity Type *
+                  </label>
+                  <div className="grid grid-cols-3 gap-3">
+                    <button
+                      onClick={() => setEntityType('individual')}
+                      className={`px-4 py-3.5 border-2 rounded-xl font-semibold transition-all shadow-sm flex items-center justify-center gap-2 ${
+                        entityType === 'individual'
+                          ? 'border-purple-600 bg-gradient-to-br from-purple-600 to-purple-700 text-white shadow-lg'
+                          : 'border-slate-300 text-slate-700 hover:border-purple-400 bg-white hover:bg-purple-50'
+                      }`}
+                    >
+                      <User className="w-4 h-4" />
+                      Individual
+                    </button>
+                    <button
+                      onClick={() => setEntityType('entity')}
+                      className={`px-4 py-3.5 border-2 rounded-xl font-semibold transition-all shadow-sm flex items-center justify-center gap-2 ${
+                        entityType === 'entity'
+                          ? 'border-purple-600 bg-gradient-to-br from-purple-600 to-purple-700 text-white shadow-lg'
+                          : 'border-slate-300 text-slate-700 hover:border-purple-400 bg-white hover:bg-purple-50'
+                      }`}
+                    >
+                      <Building className="w-4 h-4" />
+                      Entity
+                    </button>
+                    <button
+                      onClick={() => setEntityType('both')}
+                      className={`px-4 py-3.5 border-2 rounded-xl font-semibold transition-all shadow-sm flex items-center justify-center gap-2 ${
+                        entityType === 'both'
+                          ? 'border-purple-600 bg-gradient-to-br from-purple-600 to-purple-700 text-white shadow-lg'
+                          : 'border-slate-300 text-slate-700 hover:border-purple-400 bg-white hover:bg-purple-50'
+                      }`}
+                    >
+                      <Users className="w-4 h-4" />
+                      Both
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">
+                      Country (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={country}
+                      onChange={(e) => setCountry(e.target.value)}
+                      className="w-full px-4 py-3.5 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition shadow-sm"
+                      placeholder="e.g., Russia, Iran"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">
+                      Date of Birth (Optional)
+                    </label>
+                    <input
+                      type="date"
+                      value={dateOfBirth}
+                      onChange={(e) => setDateOfBirth(e.target.value)}
+                      className="w-full px-4 py-3.5 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition shadow-sm"
+                    />
+                  </div>
+                </div>
+
                 <button
                   onClick={handleScreen}
                   disabled={loading || !entityName.trim()}
@@ -302,7 +466,6 @@ export default function ScreeningPage() {
               </div>
             </div>
 
-            {/* AI Analysis Results */}
             {result && (
               <div className={`rounded-lg shadow-md border-2 p-8 ${getRiskColor(result.risk_level)}`}>
                 <div className="flex items-center justify-between mb-6">
@@ -322,7 +485,6 @@ export default function ScreeningPage() {
                   </div>
                 </div>
 
-                {/* AI Compliance Analysis */}
                 {(result.ai_explanation || result.ai_analysis) && (
                   <div className="mb-6 p-6 bg-white/90 backdrop-blur rounded-lg border-2 border-slate-300 shadow-sm">
                     <div className="flex items-start gap-3 mb-3">
@@ -369,7 +531,6 @@ export default function ScreeningPage() {
                   </div>
                 )}
 
-                {/* Export Button */}
                 {result.matches.length > 0 && (
                   <div className="flex justify-end mb-6">
                     <button
@@ -382,7 +543,6 @@ export default function ScreeningPage() {
                   </div>
                 )}
 
-                {/* Detailed Matches with Aliases/AKAs */}
                 {result.matches.length > 0 && (
                   <div className="space-y-4">
                     <h4 className="font-bold text-base flex items-center gap-2 text-slate-900 uppercase tracking-wide">
@@ -406,9 +566,7 @@ export default function ScreeningPage() {
             )}
           </div>
 
-          {/* Sidebar - CLEAN (No Database Coverage) */}
           <div className="space-y-6">
-            {/* System Status */}
             {stats && (
               <div className="bg-white rounded-xl shadow-xl border border-slate-200 p-6">
                 <h3 className="font-bold text-base mb-4 flex items-center gap-2 text-slate-900">
@@ -426,7 +584,6 @@ export default function ScreeningPage() {
               </div>
             )}
 
-            {/* Live Sanctions Feed */}
             <div className="bg-white rounded-xl shadow-xl border border-slate-200 p-6">
               <h3 className="font-bold text-base mb-4 flex items-center gap-2 text-slate-900">
                 <Shield className="w-5 h-5 text-blue-600" />
@@ -455,7 +612,6 @@ export default function ScreeningPage() {
               </div>
             </div>
 
-            {/* AI Features */}
             <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl shadow-xl border-2 border-blue-200 p-6">
               <h3 className="font-bold text-base mb-4 flex items-center gap-2 text-slate-900">
                 <Brain className="w-5 h-5 text-blue-600" />
@@ -466,13 +622,6 @@ export default function ScreeningPage() {
                   <Shield className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
                   <div>
                     <p className="font-semibold text-slate-900">Risk Assessment</p>
-                    <p className="text-slate-600 text-xs">Automated compliance scoring</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3 p-3.5 bg-white rounded-xl border border-purple-100">
-                  <TrendingUp className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-semibold text-slate-900">Match Analysis</p>
                     <p className="text-slate-600 text-xs">Intelligent entity verification</p>
                   </div>
                 </div>
@@ -481,6 +630,35 @@ export default function ScreeningPage() {
                   <div>
                     <p className="font-semibold text-slate-900">Action Recommendations</p>
                     <p className="text-slate-600 text-xs">Decision support guidance</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}Automated compliance scoring</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 p-3.5 bg-white rounded-xl border border-purple-100">
+                  <TrendingUp className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-semibold text-slate-900">Match Analysis</p>
+                    <p className="text-slate-600 text-xs">
+                         <div className="flex items-start gap-3 p-3.5 bg-white rounded-xl border border-blue-100">
+                  <AlertTriangle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-semibold text-slate-900">Action Recommendations</p>
+                    <p className="text-slate-600 text-xs">Decision support guidance</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 p-3.5 bg-white rounded-xl border border-blue-100">
+                  <TrendingUp className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-semibold text-slate-900">Match Analysis</p>
+                    <p className="text-slate-600 text-xs">Automated compliance scoring</p>
                   </div>
                 </div>
               </div>
